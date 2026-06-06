@@ -42,6 +42,19 @@ impl Iterator for InputParser {
             [0x1B, b'[', b'3', b'~', ..] => (Key::Delete, 4),
             [0x1B, b'[', b'5', b'~', ..] => (Key::PageUp, 4),
             [0x1B, b'[', b'6', b'~', ..] => (Key::PageDown, 4),
+            // F1-F12 (CSI sequences: ESC [ 11~ through ESC [ 24~)
+            [0x1B, b'[', b'1', b'1', b'~', ..] => (Key::F1, 5),
+            [0x1B, b'[', b'1', b'2', b'~', ..] => (Key::F2, 5),
+            [0x1B, b'[', b'1', b'3', b'~', ..] => (Key::F3, 5),
+            [0x1B, b'[', b'1', b'4', b'~', ..] => (Key::F4, 5),
+            [0x1B, b'[', b'1', b'5', b'~', ..] => (Key::F5, 5),
+            [0x1B, b'[', b'1', b'7', b'~', ..] => (Key::F6, 5),
+            [0x1B, b'[', b'1', b'8', b'~', ..] => (Key::F7, 5),
+            [0x1B, b'[', b'1', b'9', b'~', ..] => (Key::F8, 5),
+            [0x1B, b'[', b'2', b'0', b'~', ..] => (Key::F9, 5),
+            [0x1B, b'[', b'2', b'1', b'~', ..] => (Key::F10, 5),
+            [0x1B, b'[', b'2', b'3', b'~', ..] => (Key::F11, 5),
+            [0x1B, b'[', b'2', b'4', b'~', ..] => (Key::F12, 5),
             // Alt + printable ASCII character
             [0x1B, b @ 0x20..=0x7E, ..] => (Key::Alt(*b as char), 2),
             // Alt + UTF-8 character
