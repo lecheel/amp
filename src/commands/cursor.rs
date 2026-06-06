@@ -1,9 +1,126 @@
 use super::{application, buffer};
 use crate::commands::{self, Result};
 use crate::errors::*;
+use crate::models::application::git_gutter;
 use crate::models::application::Application;
+use crate::models::application::GitGutterStatus;
 use crate::util::token::{adjacent_token_position, Direction};
 use scribe::buffer::Position;
+
+pub fn move_to_next_hunk(app: &mut Application) -> Result {
+    let cursor_line = app
+        .workspace
+        .current_buffer
+        .as_ref()
+        .context(BUFFER_MISSING)?
+        .cursor
+        .line;
+
+    let statuses = gutter_statuses(app)?;
+
+    // If we're currently inside a hunk, skip past it first
+    // so that repeated ]h presses cycle through hunks.
+    let start_search =
+        if cursor_line < statuses.len() && statuses[cursor_line] != GitGutterStatus::Unchanged {
+            // Find the end of the current hunk
+            let mut end = cursor_line + 1;
+            while end < statuses.len() && statuses[end] != GitGutterStatus::Unchanged {
+                end += 1;
+            }
+            end
+        } else {
+            cursor_line + 1
+        };
+
+    // Find the start of the next hunk (first non-unchanged line)
+    let target_line = statuses
+        .iter()
+        .enumerate()
+        .skip(start_search)
+        .find(|(_, status)| **status != GitGutterStatus::Unchanged)
+        .map(|(line, _)| line);
+
+    if let Some(line) = target_line {
+        let buffer = app
+            .workspace
+            .current_buffer
+            .as_mut()
+            .context(BUFFER_MISSING)?;
+        let offset = buffer.cursor.offset;
+        buffer.cursor.move_to(Position { line, offset });
+    }
+
+    commands::view::scroll_to_cursor(app).context(SCROLL_TO_CURSOR_FAILED)
+}
+
+pub fn move_to_previous_hunk(app: &mut Application) -> Result {
+    let cursor_line = app
+        .workspace
+        .current_buffer
+        .as_ref()
+        .context(BUFFER_MISSING)?
+        .cursor
+        .line;
+
+    let statuses = gutter_statuses(app)?;
+
+    // If we're currently inside a hunk, skip before it first
+    // so that repeated [h presses cycle through hunks.
+    let start_search =
+        if cursor_line < statuses.len() && statuses[cursor_line] != GitGutterStatus::Unchanged {
+            // Find the start of the current hunk
+            let mut start = cursor_line;
+            while start > 0 && statuses[start] != GitGutterStatus::Unchanged {
+                start -= 1;
+            }
+            if statuses[start] == GitGutterStatus::Unchanged {
+                start
+            } else {
+                0
+            }
+        } else {
+            cursor_line
+        };
+
+    // Find the start of the previous hunk by scanning backwards
+    // to find the first non-unchanged line, then find the actual
+    // start of that hunk.
+    let target_line = statuses
+        .iter()
+        .enumerate()
+        .take(start_search)
+        .rfind(|(_, status)| **status != GitGutterStatus::Unchanged)
+        .map(|(line, _)| {
+            // Walk backwards to find the true start of this hunk
+            let mut hunk_start = line;
+            while hunk_start > 0 && statuses[hunk_start - 1] != GitGutterStatus::Unchanged {
+                hunk_start -= 1;
+            }
+            hunk_start
+        });
+
+    if let Some(line) = target_line {
+        let buffer = app
+            .workspace
+            .current_buffer
+            .as_mut()
+            .context(BUFFER_MISSING)?;
+        let offset = buffer.cursor.offset;
+        buffer.cursor.move_to(Position { line, offset });
+    }
+
+    commands::view::scroll_to_cursor(app).context(SCROLL_TO_CURSOR_FAILED)
+}
+
+fn gutter_statuses(app: &Application) -> anyhow::Result<Vec<GitGutterStatus>> {
+    let buffer = app
+        .workspace
+        .current_buffer
+        .as_ref()
+        .context(BUFFER_MISSING)?;
+    let repo = app.repository.as_ref().context("No git repository found")?;
+    git_gutter::line_statuses(repo, buffer)
+}
 
 pub fn move_up(app: &mut Application) -> Result {
     app.workspace
@@ -407,5 +524,19 @@ mod tests {
         app.workspace.add_buffer(buffer);
 
         app
+    }
+
+    #[test]
+    fn move_to_next_hunk_errors_without_repository() {
+        let mut app = set_up_application("unchanged\nmodified\nunchanged2\n");
+        let result = super::move_to_next_hunk(&mut app);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn move_to_previous_hunk_errors_without_repository() {
+        let mut app = set_up_application("unchanged\nmodified\nunchanged2\n");
+        let result = super::move_to_previous_hunk(&mut app);
+        assert!(result.is_err());
     }
 }

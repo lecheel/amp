@@ -361,6 +361,16 @@ pub fn switch_to_pending_change_mode(app: &mut Application) -> Result {
     Ok(())
 }
 
+pub fn switch_to_pending_left_bracket_mode(app: &mut Application) -> Result {
+    app.switch_to(ModeKey::PendingLeftBracket);
+    Ok(())
+}
+
+pub fn switch_to_pending_right_bracket_mode(app: &mut Application) -> Result {
+    app.switch_to(ModeKey::PendingRightBracket);
+    Ok(())
+}
+
 pub fn display_last_error(app: &mut Application) -> Result {
     let error = app.error.take().context("No error to display")?;
     let scope_display_buffer = {

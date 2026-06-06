@@ -1,5 +1,6 @@
 mod clipboard;
 mod event;
+pub mod git_gutter;
 pub mod modes;
 mod preferences;
 mod syntax_loader;
@@ -7,6 +8,7 @@ mod syntax_loader;
 // Published API
 pub use self::clipboard::ClipboardContent;
 pub use self::event::Event;
+pub use self::git_gutter::GitGutterStatus;
 pub use self::modes::{Mode, ModeKey};
 pub use self::preferences::Preferences;
 
@@ -92,11 +94,20 @@ impl Application {
     }
 
     fn render(&mut self) -> Result<()> {
+        // Compute git gutter status for the current buffer
+        self.view.gutter_statuses = self.compute_gutter_statuses();
+
         if let Err(error) = self.present() {
             presenters::error::display(&mut self.workspace, &mut self.view, &error)?;
         }
 
         Ok(())
+    }
+
+    fn compute_gutter_statuses(&self) -> Option<Vec<GitGutterStatus>> {
+        let buffer = self.workspace.current_buffer.as_ref()?;
+        let repo = self.repository.as_ref()?;
+        git_gutter::line_statuses(repo, buffer).ok()
     }
 
     fn present(&mut self) -> Result<()> {
@@ -161,6 +172,18 @@ impl Application {
             Mode::PendingYank(_) => presenters::modes::pending_yank::display(
                 &mut self.workspace,
                 &mut self.view,
+                &self.error,
+            ),
+            Mode::PendingLeftBracket(_) => presenters::modes::pending_left_bracket::display(
+                &mut self.workspace,
+                &mut self.view,
+                &self.repository,
+                &self.error,
+            ),
+            Mode::PendingRightBracket(_) => presenters::modes::pending_right_bracket::display(
+                &mut self.workspace,
+                &mut self.view,
+                &self.repository,
                 &self.error,
             ),
             Mode::SymbolJump(ref mut mode) => presenters::modes::search_select::display(
@@ -302,6 +325,8 @@ impl Application {
             Mode::PendingChange(_) => Some("pending_change"),
             Mode::PendingDelete(_) => Some("pending_delete"),
             Mode::PendingYank(_) => Some("pending_yank"),
+            Mode::PendingLeftBracket(_) => Some("pending_left_bracket"),
+            Mode::PendingRightBracket(_) => Some("pending_right_bracket"),
             Mode::Select(_) => Some("select"),
             Mode::SelectLine(_) => Some("select_line"),
             Mode::Search(ref mode) => {
@@ -357,6 +382,14 @@ impl Application {
         self.modes.insert(
             ModeKey::PendingDelete,
             Mode::PendingDelete(PendingDeleteMode::new()),
+        );
+        self.modes.insert(
+            ModeKey::PendingLeftBracket,
+            Mode::PendingLeftBracket(PendingLeftBracketMode::new()),
+        );
+        self.modes.insert(
+            ModeKey::PendingRightBracket,
+            Mode::PendingRightBracket(PendingRightBracketMode::new()),
         );
         self.modes.insert(
             ModeKey::PendingYank,

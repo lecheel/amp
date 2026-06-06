@@ -1,4 +1,5 @@
 use crate::errors::*;
+use crate::models::application::GitGutterStatus;
 use crate::models::application::Preferences;
 use crate::view::buffer::line_numbers::*;
 use crate::view::buffer::{LexemeMapper, MappedLexeme, RenderState};
@@ -24,6 +25,7 @@ pub struct BufferRenderer<'a, 'p> {
     buffer_position: Position,
     cursor_position: Option<Position>,
     gutter_width: usize,
+    gutter_statuses: Option<Vec<GitGutterStatus>>,
     highlights: Option<&'a [Range]>,
     stylist: Highlighter<'a>,
     current_style: ThemeStyle,
@@ -50,6 +52,7 @@ impl<'a, 'p> BufferRenderer<'a, 'p> {
         render_cache: &'a Rc<RefCell<HashMap<usize, RenderState>>>,
         syntax_set: &'a SyntaxSet,
         terminal_buffer: &'a mut TerminalBuffer<'p>,
+        gutter_statuses: Option<Vec<GitGutterStatus>>,
     ) -> BufferRenderer<'a, 'p> {
         let line_numbers = LineNumbers::new(buffer, Some(scroll_offset));
         let gutter_width = line_numbers.width() + 1;
@@ -63,6 +66,7 @@ impl<'a, 'p> BufferRenderer<'a, 'p> {
             buffer,
             cursor_position: None,
             gutter_width,
+            gutter_statuses,
             highlights,
             stylist,
             current_style,
@@ -362,23 +366,65 @@ impl<'a, 'p> BufferRenderer<'a, 'p> {
             line_number,
         );
 
-        // Leave a one-column gap between line numbers and buffer content.
-        let gap_color = if self.on_cursor_line() {
-            Colors::Focused
-        } else {
-            Colors::Default
-        };
+        // Print gutter marker (or gap) between line numbers and content.
+        let gutter_status = self
+            .gutter_statuses
+            .as_ref()
+            .and_then(|s| s.get(self.buffer_position.line))
+            .copied()
+            .unwrap_or(GitGutterStatus::Unchanged);
+
+        let (gutter_char, gutter_color) = self.gutter_style(gutter_status);
+
         self.print(
             Position {
                 line: self.screen_position.line,
                 offset: self.line_numbers.width(),
             },
             weight,
-            gap_color,
-            " ",
+            gutter_color,
+            gutter_char,
         );
 
         self.screen_position.offset = self.line_numbers.width() + 1;
+    }
+
+    /// Returns the display character and color for a git gutter status.
+    fn gutter_style(&self, status: GitGutterStatus) -> (&'static str, Colors) {
+        match status {
+            GitGutterStatus::Added => {
+                let color = if self.on_cursor_line() {
+                    Colors::CustomFocusedForeground(RGBColor(0x7E, 0xC6, 0x8E))
+                } else {
+                    Colors::CustomForeground(RGBColor(0x7E, 0xC6, 0x8E))
+                };
+                ("+", color)
+            }
+            GitGutterStatus::Modified => {
+                let color = if self.on_cursor_line() {
+                    Colors::CustomFocusedForeground(RGBColor(0xE5, 0xC0, 0x7B))
+                } else {
+                    Colors::CustomForeground(RGBColor(0xE5, 0xC0, 0x7B))
+                };
+                ("~", color)
+            }
+            GitGutterStatus::Deleted => {
+                let color = if self.on_cursor_line() {
+                    Colors::CustomFocusedForeground(RGBColor(0xE0, 0x6C, 0x75))
+                } else {
+                    Colors::CustomForeground(RGBColor(0xE0, 0x6C, 0x75))
+                };
+                ("-", color)
+            }
+            GitGutterStatus::Unchanged => {
+                let color = if self.on_cursor_line() {
+                    Colors::Focused
+                } else {
+                    Colors::Default
+                };
+                (" ", color)
+            }
+        }
     }
 
     fn next_tab_stop(&self, offset: usize) -> usize {

@@ -62,7 +62,10 @@ impl TermionTerminal {
         let output = guard.borrow_mut().as_mut().context(STDOUT_FAILED)?;
 
         // Push style changes to the terminal.
-        let mut current_style = self.current_style.lock().map_err(|_| anyhow!(LOCK_POISONED))?;
+        let mut current_style = self
+            .current_style
+            .lock()
+            .map_err(|_| anyhow!(LOCK_POISONED))?;
         if Some(new_style) != *current_style {
             // Store the new style state for comparison in the next pass.
             current_style.replace(new_style);
@@ -78,7 +81,10 @@ impl TermionTerminal {
             let _ = write!(output, "{}", style::Reset);
 
             // Resetting styles clears active colors, too; set those again.
-            let color_guard = self.current_colors.lock().map_err(|_| anyhow!(LOCK_POISONED))?;
+            let color_guard = self
+                .current_colors
+                .lock()
+                .map_err(|_| anyhow!(LOCK_POISONED))?;
             if let Some(current_colors) = color_guard.borrow().as_ref() {
                 match *current_colors {
                     Colors::Default => {
@@ -105,7 +111,10 @@ impl TermionTerminal {
         let output = guard.borrow_mut().as_mut().context(STDOUT_FAILED)?;
 
         // Push color changes to the terminal.
-        let mut current_colors = self.current_colors.lock().map_err(|_| anyhow!(LOCK_POISONED))?;
+        let mut current_colors = self
+            .current_colors
+            .lock()
+            .map_err(|_| anyhow!(LOCK_POISONED))?;
         if Some(new_colors) != *current_colors {
             // Store the new color state for comparison in the next pass.
             current_colors.replace(new_colors);

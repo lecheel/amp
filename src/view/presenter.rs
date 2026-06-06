@@ -108,6 +108,7 @@ impl<'p> Presenter<'p> {
     ) -> Result<()> {
         let scroll_offset = self.view.get_region(buffer)?.line_offset();
         let lines = LineIterator::new(buffer_data);
+        let gutter_statuses = self.view.gutter_statuses.clone();
 
         debug!("rendering buffer");
 
@@ -121,6 +122,7 @@ impl<'p> Presenter<'p> {
             self.view.get_render_cache(buffer)?,
             syntax_set,
             &mut self.terminal_buffer,
+            gutter_statuses,
         )
         .render(lines, lexeme_mapper)?;
 

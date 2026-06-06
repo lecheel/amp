@@ -27,6 +27,8 @@ pub enum Mode {
     Path(PathMode),
     PendingChange(PendingChangeMode),
     PendingDelete(PendingDeleteMode),
+    PendingLeftBracket(PendingLeftBracketMode),
+    PendingRightBracket(PendingRightBracketMode),
     PendingYank(PendingYankMode),
     Search(SearchMode),
     Select(SelectMode),
@@ -50,6 +52,8 @@ pub enum ModeKey {
     Path,
     PendingChange,
     PendingDelete,
+    PendingLeftBracket,
+    PendingRightBracket,
     PendingYank,
     Search,
     Select,
@@ -102,6 +106,36 @@ impl PendingDeleteMode {
 impl fmt::Display for PendingDeleteMode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "DELETE")
+    }
+}
+
+#[derive(Default)]
+pub struct PendingLeftBracketMode;
+
+impl PendingLeftBracketMode {
+    pub fn new() -> PendingLeftBracketMode {
+        PendingLeftBracketMode::default()
+    }
+}
+
+impl fmt::Display for PendingLeftBracketMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "[")
+    }
+}
+
+#[derive(Default)]
+pub struct PendingRightBracketMode;
+
+impl PendingRightBracketMode {
+    pub fn new() -> PendingRightBracketMode {
+        PendingRightBracketMode::default()
+    }
+}
+
+impl fmt::Display for PendingRightBracketMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "]")
     }
 }
 

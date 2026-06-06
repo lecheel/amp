@@ -21,7 +21,7 @@ use self::event_listener::EventListener;
 use self::theme_loader::ThemeLoader;
 use crate::errors::*;
 use crate::input::Key;
-use crate::models::application::{Event, Preferences};
+use crate::models::application::{Event, GitGutterStatus, Preferences};
 use log::debug;
 use scribe::buffer::Buffer;
 use std::cell::RefCell;
@@ -46,6 +46,7 @@ pub struct View {
     pub last_key: Option<Key>,
     event_channel: Sender<Event>,
     event_listener_killswitch: SyncSender<()>,
+    pub gutter_statuses: Option<Vec<GitGutterStatus>>,
 }
 
 impl View {
@@ -69,6 +70,7 @@ impl View {
             theme_set,
             event_channel,
             event_listener_killswitch: killswitch_tx,
+            gutter_statuses: None,
         })
     }
 
@@ -216,9 +218,7 @@ impl Drop for View {
 }
 
 fn buffer_key(buffer: &Buffer) -> Result<usize> {
-    buffer
-        .id
-        .ok_or_else(|| anyhow!("Buffer ID doesn't exist"))
+    buffer.id.ok_or_else(|| anyhow!("Buffer ID doesn't exist"))
 }
 
 #[cfg(test)]
