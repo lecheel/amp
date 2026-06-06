@@ -33,11 +33,11 @@ pub fn nop(_app: &mut Application) -> Result {
 }
 
 pub fn switch_to_buffer_list_mode(app: &mut Application) -> Result {
-    // Collect buffer info by cycling through the workspace
     let start_id = app.workspace.current_buffer.as_ref().map(|b| b.id);
-    let mut lines = Vec::new();
-    let mut first = true;
 
+    // 1. Check if the [Buffer List] buffer already exists
+    let mut existing_list_id = None;
+    let mut first = true;
     loop {
         if !first && app.workspace.current_buffer.as_ref().map(|b| b.id) == start_id {
             break;
@@ -45,20 +45,73 @@ pub fn switch_to_buffer_list_mode(app: &mut Application) -> Result {
         first = false;
 
         if let Some(buf) = app.workspace.current_buffer.as_ref() {
-            let path_str = buf
+            let is_list = buf
                 .path
                 .as_ref()
-                .map(|p| p.to_string_lossy().into_owned())
-                .unwrap_or_else(|| "[No Name]".to_string());
-            let modified = if buf.modified() { " [+]" } else { "" };
-            lines.push(format!("{}{}", path_str, modified));
-        }
+                .map(|p| p.to_string_lossy() == "[Buffer List]")
+                .unwrap_or(false);
 
+            if is_list {
+                existing_list_id = Some(buf.id);
+                break; // Found it!
+            }
+        }
         app.workspace.next_buffer();
     }
 
-    // Create a special buffer listing all open buffers
-    {
+    // Reset back to the original buffer before collecting lines
+    while app.workspace.current_buffer.as_ref().map(|b| b.id) != start_id {
+        app.workspace.next_buffer();
+    }
+
+    // 2. Collect current open buffers (excluding the list buffer itself)
+    let mut lines = Vec::new();
+    first = true;
+    loop {
+        if !first && app.workspace.current_buffer.as_ref().map(|b| b.id) == start_id {
+            break;
+        }
+        first = false;
+
+        if let Some(buf) = app.workspace.current_buffer.as_ref() {
+            let is_list = buf
+                .path
+                .as_ref()
+                .map(|p| p.to_string_lossy() == "[Buffer List]")
+                .unwrap_or(false);
+
+            if !is_list {
+                let path_str = buf
+                    .path
+                    .as_ref()
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "[No Name]".to_string());
+                let modified = if buf.modified() { " [+]" } else { "" };
+                lines.push(format!("{}{}", path_str, modified));
+            }
+        }
+        app.workspace.next_buffer();
+    }
+
+    // 3. Switch to the existing buffer and update it, or create a new one
+    if let Some(id) = existing_list_id {
+        // Navigate to the existing list buffer
+        while app.workspace.current_buffer.as_ref().map(|b| b.id) != Some(id) {
+            app.workspace.next_buffer();
+        }
+
+        // Update its content so it reflects the current workspace state
+        if let Some(buf) = app.workspace.current_buffer.as_mut() {
+            let mut content = lines.join("\n");
+            if !content.is_empty() {
+                content.push('\n');
+            }
+            buf.replace(content); // Replace the old list with the new one
+            buf.cursor
+                .move_to(scribe::buffer::Position { line: 0, offset: 0 }); // Jump to top
+        }
+    } else {
+        // Create a new list buffer
         let mut list_buffer = Buffer::new();
         list_buffer.path = Some(PathBuf::from("[Buffer List]"));
         for line in &lines {
@@ -67,7 +120,7 @@ pub fn switch_to_buffer_list_mode(app: &mut Application) -> Result {
         util::add_buffer(list_buffer, app)?;
     }
 
-    // Drop into normal mode to navigate the buffer naturally
+    // 4. Drop into normal mode to navigate the buffer naturally
     commands::application::switch_to_normal_mode(app)?;
 
     Ok(())
