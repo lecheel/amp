@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::slice::Iter;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct SearchSelectConfig {
     pub max_results: usize,
 }

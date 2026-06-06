@@ -76,7 +76,8 @@ normal:
   page_down: view::scroll_down
   space: application::switch_to_open_mode
   tab: workspace::next_buffer
-  enter: application::switch_to_symbol_jump_mode
+  # enter: application::switch_to_symbol_jump_mode
+  enter: buffer_list::open_under_cursor
   backspace:
     - buffer::backspace
     - application::switch_to_insert_mode

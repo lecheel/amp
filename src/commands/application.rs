@@ -32,6 +32,47 @@ pub fn nop(_app: &mut Application) -> Result {
     Ok(())
 }
 
+pub fn switch_to_buffer_list_mode(app: &mut Application) -> Result {
+    // Collect buffer info by cycling through the workspace
+    let start_id = app.workspace.current_buffer.as_ref().map(|b| b.id);
+    let mut lines = Vec::new();
+    let mut first = true;
+
+    loop {
+        if !first && app.workspace.current_buffer.as_ref().map(|b| b.id) == start_id {
+            break;
+        }
+        first = false;
+
+        if let Some(buf) = app.workspace.current_buffer.as_ref() {
+            let path_str = buf
+                .path
+                .as_ref()
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "[No Name]".to_string());
+            let modified = if buf.modified() { " [+]" } else { "" };
+            lines.push(format!("{}{}", path_str, modified));
+        }
+
+        app.workspace.next_buffer();
+    }
+
+    // Create a special buffer listing all open buffers
+    {
+        let mut list_buffer = Buffer::new();
+        list_buffer.path = Some(PathBuf::from("[Buffer List]"));
+        for line in &lines {
+            list_buffer.insert(format!("{}\n", line));
+        }
+        util::add_buffer(list_buffer, app)?;
+    }
+
+    // Drop into normal mode to navigate the buffer naturally
+    commands::application::switch_to_normal_mode(app)?;
+
+    Ok(())
+}
+
 pub fn switch_to_normal_mode(app: &mut Application) -> Result {
     let _ = commands::buffer::end_command_group(app);
     app.switch_to(ModeKey::Normal);

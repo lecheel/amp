@@ -4,6 +4,7 @@ use std::collections::HashMap;
 pub mod alias;
 pub mod application;
 pub mod buffer;
+pub mod buffer_list;
 pub mod confirm;
 pub mod cursor;
 pub mod git;
@@ -25,6 +26,10 @@ pub fn hash_map() -> HashMap<&'static str, Command> {
     let mut map: HashMap<&'static str, Command> = include!(concat!(env!("OUT_DIR"), "/hash_map"));
 
     map.insert("application::nop", application::nop);
+    map.insert(
+        "buffer_list::open_under_cursor",
+        buffer_list::open_under_cursor,
+    );
 
     // Vim-style command mode aliases
     map.insert("bn", workspace::next_buffer);
