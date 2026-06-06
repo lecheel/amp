@@ -21,5 +21,9 @@ pub type Command = fn(&mut Application) -> Result;
 pub type Result = anyhow::Result<()>;
 
 pub fn hash_map() -> HashMap<&'static str, Command> {
-    include!(concat!(env!("OUT_DIR"), "/hash_map"))
+    let mut map: HashMap<&'static str, Command> = include!(concat!(env!("OUT_DIR"), "/hash_map"));
+
+    map.insert("application::nop", application::nop);
+
+    map
 }

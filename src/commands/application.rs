@@ -28,6 +28,10 @@ pub fn handle_input(app: &mut Application) -> Result {
     Ok(())
 }
 
+pub fn nop(_app: &mut Application) -> Result {
+    Ok(())
+}
+
 pub fn switch_to_normal_mode(app: &mut Application) -> Result {
     let _ = commands::buffer::end_command_group(app);
     app.switch_to(ModeKey::Normal);
