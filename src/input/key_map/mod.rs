@@ -145,25 +145,19 @@ fn parse_mode_key_bindings(
             Yaml::String(ref command) => {
                 let command_string = command.as_str();
 
-                key_commands.push(
-                    *commands
-                        .get(&command_string)
-                        .with_context(|| format!("Keymap command \"{command_string}\" doesn't exist"))?,
-                );
+                key_commands.push(*commands.get(&command_string).with_context(|| {
+                    format!("Keymap command \"{command_string}\" doesn't exist")
+                })?);
             }
             Yaml::Array(ref command_array) => {
                 for command in command_array {
-                    let command_string = command
-                        .as_str()
-                        .with_context(|| {
-                            format!("Keymap command \"{command:?}\" couldn't be parsed as a string")
-                        })?;
+                    let command_string = command.as_str().with_context(|| {
+                        format!("Keymap command \"{command:?}\" couldn't be parsed as a string")
+                    })?;
 
-                    key_commands.push(
-                        *commands
-                            .get(command_string)
-                            .with_context(|| format!("Keymap command \"{command_string}\" doesn't exist"))?,
-                    );
+                    key_commands.push(*commands.get(command_string).with_context(|| {
+                        format!("Keymap command \"{command_string}\" doesn't exist")
+                    })?);
                 }
             }
             _ => bail!(format!(
@@ -201,6 +195,7 @@ fn parse_key(data: &str) -> Result<Key> {
         // Find the variant for the specified modifier.
         match component {
             "ctrl" => Ok(Key::Ctrl(key_char)),
+            "alt" => Ok(Key::Alt(key_char)),
             _ => bail!(format!("Keymap modifier \"{}\" is invalid", component)),
         }
     } else {
@@ -223,7 +218,6 @@ fn parse_key(data: &str) -> Result<Key> {
             "enter" => Key::Enter,
             "_" => Key::AnyChar,
             _ => Key::Char(
-                // It's not a keyword; take its first character, if available.
                 component
                     .chars()
                     .next()

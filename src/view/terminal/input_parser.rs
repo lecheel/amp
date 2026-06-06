@@ -42,6 +42,17 @@ impl Iterator for InputParser {
             [0x1B, b'[', b'3', b'~', ..] => (Key::Delete, 4),
             [0x1B, b'[', b'5', b'~', ..] => (Key::PageUp, 4),
             [0x1B, b'[', b'6', b'~', ..] => (Key::PageDown, 4),
+            // Alt + printable ASCII character
+            [0x1B, b @ 0x20..=0x7E, ..] => (Key::Alt(*b as char), 2),
+            // Alt + UTF-8 character
+            [0x1B, b @ 0x80..=0xFF, ..] => {
+                let (key, utf8_len) = utf8_char(&slice[1..], *b)?;
+                match key {
+                    Key::Char(c) => (Key::Alt(c), 1 + utf8_len),
+                    _ => return None,
+                }
+            }
+            // Bare Escape (no following character in this batch)
             [0x1B, ..] => (Key::Esc, 1),
             [0x7F, ..] | [0x08, ..] => (Key::Backspace, 1),
             [0x0A, ..] | [0x0D, ..] => (Key::Enter, 1),

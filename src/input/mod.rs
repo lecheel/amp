@@ -21,4 +21,5 @@ pub enum Key {
     AnyChar,
     Char(char),
     Ctrl(char),
+    Alt(char),
 }
