@@ -12,6 +12,8 @@ mod symbol_jump;
 mod syntax;
 mod theme;
 
+use std::fmt;
+
 pub enum Mode {
     Command(CommandMode),
     Confirm(ConfirmMode),
@@ -23,6 +25,9 @@ pub enum Mode {
     Open(OpenMode),
     Paste,
     Path(PathMode),
+    PendingChange(PendingChangeMode),
+    PendingDelete(PendingDeleteMode),
+    PendingYank(PendingYankMode),
     Search(SearchMode),
     Select(SelectMode),
     SelectLine(SelectLineMode),
@@ -43,6 +48,9 @@ pub enum ModeKey {
     Open,
     Paste,
     Path,
+    PendingChange,
+    PendingDelete,
+    PendingYank,
     Search,
     Select,
     SelectLine,
@@ -64,3 +72,50 @@ pub use self::select_line::SelectLineMode;
 pub use self::symbol_jump::SymbolJumpMode;
 pub use self::syntax::SyntaxMode;
 pub use self::theme::ThemeMode;
+
+// Pending mode types
+
+#[derive(Default)]
+pub struct PendingChangeMode;
+
+impl PendingChangeMode {
+    pub fn new() -> PendingChangeMode {
+        PendingChangeMode::default()
+    }
+}
+
+impl fmt::Display for PendingChangeMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "CHANGE")
+    }
+}
+
+#[derive(Default)]
+pub struct PendingDeleteMode;
+
+impl PendingDeleteMode {
+    pub fn new() -> PendingDeleteMode {
+        PendingDeleteMode::default()
+    }
+}
+
+impl fmt::Display for PendingDeleteMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "DELETE")
+    }
+}
+
+#[derive(Default)]
+pub struct PendingYankMode;
+
+impl PendingYankMode {
+    pub fn new() -> PendingYankMode {
+        PendingYankMode::default()
+    }
+}
+
+impl fmt::Display for PendingYankMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "YANK")
+    }
+}

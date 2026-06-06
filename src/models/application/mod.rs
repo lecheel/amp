@@ -148,6 +148,21 @@ impl Application {
                 &mut self.view,
                 &self.error,
             ),
+            Mode::PendingChange(_) => presenters::modes::pending_change::display(
+                &mut self.workspace,
+                &mut self.view,
+                &self.error,
+            ),
+            Mode::PendingDelete(_) => presenters::modes::pending_delete::display(
+                &mut self.workspace,
+                &mut self.view,
+                &self.error,
+            ),
+            Mode::PendingYank(_) => presenters::modes::pending_yank::display(
+                &mut self.workspace,
+                &mut self.view,
+                &self.error,
+            ),
             Mode::SymbolJump(ref mut mode) => presenters::modes::search_select::display(
                 &mut self.workspace,
                 mode,
@@ -284,6 +299,9 @@ impl Application {
             Mode::Insert => Some("insert"),
             Mode::Jump(_) => Some("jump"),
             Mode::LineJump(_) => Some("line_jump"),
+            Mode::PendingChange(_) => Some("pending_change"),
+            Mode::PendingDelete(_) => Some("pending_delete"),
+            Mode::PendingYank(_) => Some("pending_yank"),
             Mode::Select(_) => Some("select"),
             Mode::SelectLine(_) => Some("select_line"),
             Mode::Search(ref mode) => {
@@ -332,6 +350,18 @@ impl Application {
         self.modes.insert(ModeKey::Insert, Mode::Insert);
         self.modes.insert(ModeKey::Normal, Mode::Normal);
         self.modes.insert(ModeKey::Paste, Mode::Paste);
+        self.modes.insert(
+            ModeKey::PendingChange,
+            Mode::PendingChange(PendingChangeMode::new()),
+        );
+        self.modes.insert(
+            ModeKey::PendingDelete,
+            Mode::PendingDelete(PendingDeleteMode::new()),
+        );
+        self.modes.insert(
+            ModeKey::PendingYank,
+            Mode::PendingYank(PendingYankMode::new()),
+        );
 
         self.modes.insert(
             ModeKey::Command,

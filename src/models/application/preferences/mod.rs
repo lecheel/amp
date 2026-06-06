@@ -452,8 +452,7 @@ fn load_document() -> Result<Option<Yaml>> {
         .context("Couldn't read config file")?;
 
     // Parse the config file's contents and get the first YAML document inside.
-    let parsed_data =
-        YamlLoader::load_from_str(&data).context("Couldn't parse config file")?;
+    let parsed_data = YamlLoader::load_from_str(&data).context("Couldn't parse config file")?;
     Ok(parsed_data.into_iter().next())
 }
 

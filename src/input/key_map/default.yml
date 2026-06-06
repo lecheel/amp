@@ -15,6 +15,8 @@ normal:
   K: cursor::move_to_first_line
   H: cursor::move_to_start_of_line
   L: cursor::move_to_end_of_line
+  home: cursor::move_to_start_of_line
+  end: cursor::move_to_end_of_line
   b: cursor::move_to_start_of_previous_token
   w: cursor::move_to_start_of_next_token
   e: cursor::move_to_end_of_current_token
@@ -24,8 +26,9 @@ normal:
   o: cursor::insert_with_newline
   O: cursor::insert_with_newline_above
   x: buffer::delete
-  d: buffer::delete_token
-  ;: buffer::delete_current_line
+  # d, y, c now enter pending modes for dd/yy/cc/dw/cw/yw support
+  d: application::switch_to_pending_delete_mode
+  ";": buffer::delete_current_line
   D: buffer::delete_rest_of_line
   C: buffer::change_rest_of_line
   s: buffer::save
@@ -48,8 +51,8 @@ normal:
     - search::move_to_previous_result
   m: view::scroll_down
   M: buffer::merge_next_line
-  y: buffer::copy_current_line
-  c: buffer::change_token
+  y: application::switch_to_pending_yank_mode
+  c: application::switch_to_pending_change_mode
   R: git::copy_remote_url
   z: application::suspend
   Q: application::exit
@@ -84,6 +87,88 @@ normal:
   "?": application::display_quick_start_guide
   ":": application::run_file_manager
   G: application::run_git_tool
+
+# Operator-pending modes: d/y/c waits for a motion or repeated operator
+
+pending_delete:
+  # dd: delete current line
+  d:
+    - buffer::delete_current_line
+    - application::switch_to_normal_mode
+  # dw: delete token
+  w:
+    - buffer::delete_token
+    - application::switch_to_normal_mode
+  # dj: delete current line and line below
+  j:
+    - application::switch_to_select_line_mode
+    - cursor::move_down
+    - selection::copy_and_delete
+    - application::switch_to_normal_mode
+    - view::scroll_to_cursor
+  # dk: delete current line and line above
+  k:
+    - application::switch_to_select_line_mode
+    - cursor::move_up
+    - selection::copy_and_delete
+    - application::switch_to_normal_mode
+    - view::scroll_to_cursor
+  # d$: delete to end of line
+  L:
+    - buffer::delete_rest_of_line
+    - application::switch_to_normal_mode
+  escape: application::switch_to_normal_mode
+  # Any unrecognized key cancels and re-processes in normal mode
+  _:
+    - application::switch_to_normal_mode
+    - application::handle_input
+
+pending_yank:
+  # yy: copy current line
+  y:
+    - buffer::copy_current_line
+    - application::switch_to_normal_mode
+    - view::scroll_to_cursor
+  # yw: copy token
+  w:
+    - buffer::copy_token
+    - application::switch_to_normal_mode
+  # yj: copy current line and line below
+  j:
+    - application::switch_to_select_line_mode
+    - cursor::move_down
+    - selection::copy
+    - application::switch_to_normal_mode
+    - view::scroll_to_cursor
+  # yk: copy current line and line above
+  k:
+    - application::switch_to_select_line_mode
+    - cursor::move_up
+    - selection::copy
+    - application::switch_to_normal_mode
+    - view::scroll_to_cursor
+  escape: application::switch_to_normal_mode
+  _:
+    - application::switch_to_normal_mode
+    - application::handle_input
+
+pending_change:
+  # cc: change current line
+  c:
+    - buffer::change_current_line
+    - application::switch_to_normal_mode
+  # cw: change token
+  w:
+    - buffer::change_token
+    - application::switch_to_normal_mode
+  # c$: change to end of line
+  L:
+    - buffer::change_rest_of_line
+    - application::switch_to_normal_mode
+  escape: application::switch_to_normal_mode
+  _:
+    - application::switch_to_normal_mode
+    - application::handle_input
 
 insert:
   _: buffer::insert_char
@@ -226,6 +311,8 @@ select:
   K: cursor::move_to_first_line
   H: cursor::move_to_start_of_line
   L: cursor::move_to_end_of_line
+  home: cursor::move_to_start_of_line
+  end: cursor::move_to_end_of_line
   b: cursor::move_to_start_of_previous_token
   w: cursor::move_to_start_of_next_token
   e: cursor::move_to_end_of_current_token
@@ -272,6 +359,8 @@ select_line:
   K: cursor::move_to_first_line
   H: cursor::move_to_start_of_line
   L: cursor::move_to_end_of_line
+  home: cursor::move_to_start_of_line
+  end: cursor::move_to_end_of_line
   b: cursor::move_to_start_of_previous_token
   w: cursor::move_to_start_of_next_token
   e: cursor::move_to_end_of_current_token
@@ -283,7 +372,7 @@ select_line:
     - selection::copy_and_delete
     - application::switch_to_normal_mode
     - view::scroll_to_cursor
-  ;:
+  ";":
     - selection::copy_and_delete
     - application::switch_to_normal_mode
     - view::scroll_to_cursor

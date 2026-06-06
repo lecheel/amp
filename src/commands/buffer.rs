@@ -336,9 +336,7 @@ pub fn display_current_scope(app: &mut Application) -> Result {
             .workspace
             .current_buffer_tokens()
             .context(BUFFER_TOKENS_FAILED)?;
-        let mut token_iter = tokens
-            .iter()
-            .context(BUFFER_PARSE_FAILED)?;
+        let mut token_iter = tokens.iter().context(BUFFER_PARSE_FAILED)?;
 
         // Build the scope up to the cursor location.
         for token in &mut token_iter {
@@ -695,6 +693,84 @@ pub fn delete_rest_of_line(app: &mut Application) -> Result {
     Ok(())
 }
 
+pub fn change_current_line(app: &mut Application) -> Result {
+    let buffer = app
+        .workspace
+        .current_buffer
+        .as_mut()
+        .context(BUFFER_MISSING)?;
+    let current_line = buffer.cursor.line;
+    let data = buffer.data();
+
+    if let Some(line_content) = data.lines().nth(current_line) {
+        // Preserve the leading whitespace (indentation)
+        let indent: String = line_content
+            .chars()
+            .take_while(|&c| c.is_whitespace())
+            .collect();
+        let end_offset = line_content.chars().count();
+
+        buffer.start_operation_group();
+
+        // Delete from start of line to end of line content (before newline)
+        buffer.delete_range(Range::new(
+            Position {
+                line: current_line,
+                offset: 0,
+            },
+            Position {
+                line: current_line,
+                offset: end_offset,
+            },
+        ));
+
+        // Re-insert the indent and position cursor
+        buffer.insert(indent.clone());
+        buffer.cursor.move_to(Position {
+            line: current_line,
+            offset: indent.chars().count(),
+        });
+
+        buffer.end_operation_group();
+    }
+
+    commands::application::switch_to_insert_mode(app)?;
+    commands::view::scroll_to_cursor(app)?;
+
+    Ok(())
+}
+
+pub fn copy_token(app: &mut Application) -> Result {
+    let mut subsequent_token_on_line = false;
+
+    if let Some(buffer) = app.workspace.current_buffer.as_ref() {
+        if let Some(position) = adjacent_token_position(buffer, false, Direction::Forward) {
+            if position.line == buffer.cursor.line {
+                subsequent_token_on_line = true;
+            }
+        }
+    } else {
+        bail!(BUFFER_MISSING);
+    }
+
+    if subsequent_token_on_line {
+        commands::application::switch_to_select_mode(app)?;
+        commands::cursor::move_to_start_of_next_token(app)?;
+        commands::selection::copy(app)?;
+        commands::application::switch_to_normal_mode(app)?;
+        commands::view::scroll_to_cursor(app)?;
+    } else {
+        // No subsequent token on line; copy to end of line
+        commands::application::switch_to_select_mode(app)?;
+        commands::cursor::move_to_end_of_line(app)?;
+        commands::selection::copy(app)?;
+        commands::application::switch_to_normal_mode(app)?;
+        commands::view::scroll_to_cursor(app)?;
+    }
+
+    Ok(())
+}
+
 pub fn change_rest_of_line(app: &mut Application) -> Result {
     commands::buffer::delete_rest_of_line(app)?;
     commands::application::switch_to_insert_mode(app)?;
@@ -983,7 +1059,8 @@ pub fn format(app: &mut Application) -> Result {
         let error = String::from_utf8(output.stderr)
             .unwrap_or(String::from("Failed to parse stderr output as UTF8"));
 
-        Err(anyhow!(error)).with_context(|| format!("Format tool failed with code {}", output.status))
+        Err(anyhow!(error))
+            .with_context(|| format!("Format tool failed with code {}", output.status))
     }
 }
 

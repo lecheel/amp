@@ -346,6 +346,21 @@ pub fn display_available_commands(app: &mut Application) -> Result {
     Ok(())
 }
 
+pub fn switch_to_pending_delete_mode(app: &mut Application) -> Result {
+    app.switch_to(ModeKey::PendingDelete);
+    Ok(())
+}
+
+pub fn switch_to_pending_yank_mode(app: &mut Application) -> Result {
+    app.switch_to(ModeKey::PendingYank);
+    Ok(())
+}
+
+pub fn switch_to_pending_change_mode(app: &mut Application) -> Result {
+    app.switch_to(ModeKey::PendingChange);
+    Ok(())
+}
+
 pub fn display_last_error(app: &mut Application) -> Result {
     let error = app.error.take().context("No error to display")?;
     let scope_display_buffer = {
