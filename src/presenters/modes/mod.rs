@@ -1,4 +1,5 @@
 pub mod confirm;
+pub mod ex;
 pub mod insert;
 pub mod jump;
 pub mod line_jump;

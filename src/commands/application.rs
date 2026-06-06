@@ -126,6 +126,15 @@ pub fn switch_to_buffer_list_mode(app: &mut Application) -> Result {
     Ok(())
 }
 
+pub fn switch_to_ex_mode(app: &mut Application) -> Result {
+    app.switch_to(ModeKey::Ex);
+    if let Mode::Ex(ref mut mode) = app.mode {
+        mode.reset();
+        mode.input.push(':'); // Automatically insert the colon
+    }
+    Ok(())
+}
+
 pub fn switch_to_normal_mode(app: &mut Application) -> Result {
     let _ = commands::buffer::end_command_group(app);
     app.switch_to(ModeKey::Normal);

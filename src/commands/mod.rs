@@ -7,6 +7,7 @@ pub mod buffer;
 pub mod buffer_list;
 pub mod confirm;
 pub mod cursor;
+pub mod ex;
 pub mod git;
 pub mod jump;
 pub mod line_jump;
@@ -31,13 +32,13 @@ pub fn hash_map() -> HashMap<&'static str, Command> {
         buffer_list::open_under_cursor,
     );
 
-    // Vim-style command mode aliases
-    map.insert("bn", workspace::next_buffer);
-    map.insert("bp", workspace::prev_buffer);
-    map.insert("bd", buffer::close);
-    map.insert("w", buffer::save);
-    map.insert("q", application::exit);
-    map.insert("wq", alias::save_and_exit);
-    map.insert("q!", alias::force_exit);
+    // Add Ex mode commands
+    map.insert("ex::push_char", ex::push_char);
+    map.insert("ex::pop_char", ex::pop_char);
+    map.insert("ex::accept_input", ex::accept_input);
+    map.insert("ex::previous_history", ex::previous_history);
+    map.insert("ex::next_history", ex::next_history);
+    map.insert("ex::complete", ex::complete);
+
     map
 }

@@ -88,8 +88,20 @@ normal:
   ctrl-c: application::exit
   ctrl-p: application::switch_to_paste_mode
   "?": application::display_quick_start_guide
-  ":": application::run_file_manager
+  # ":": application::run_file_manager
+  ":": application::switch_to_ex_mode 
   G: application::run_git_tool
+
+ex:
+  _: ex::push_char
+  enter: ex::accept_input
+  backspace: ex::pop_char
+  up: ex::previous_history
+  down: ex::next_history
+  tab: ex::complete
+  escape: application::switch_to_normal_mode
+  ctrl-c: application::exit
+  ctrl-z: application::suspend
 
 # Operator-pending modes: d/y/c waits for a motion or repeated operator
 

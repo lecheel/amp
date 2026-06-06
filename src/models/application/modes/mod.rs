@@ -1,5 +1,6 @@
 mod command;
 mod confirm;
+mod ex;
 pub mod jump;
 mod line_jump;
 pub mod open;
@@ -12,6 +13,7 @@ mod symbol_jump;
 mod syntax;
 mod theme;
 
+pub use self::ex::ExMode;
 use std::fmt;
 
 pub enum Mode {
@@ -22,6 +24,7 @@ pub enum Mode {
     Jump(JumpMode),
     LineJump(LineJumpMode),
     Normal,
+    Ex(ExMode),
     Open(OpenMode),
     Paste,
     Path(PathMode),
@@ -48,6 +51,7 @@ pub enum ModeKey {
     LineJump,
     Normal,
     Open,
+    Ex,
     Paste,
     Path,
     PendingChange,

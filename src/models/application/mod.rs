@@ -123,6 +123,12 @@ impl Application {
                 &mut self.view,
                 &self.error,
             ),
+            Mode::Ex(ref mode) => presenters::modes::ex::display(
+                &mut self.workspace,
+                mode,
+                &mut self.view,
+                &self.error,
+            ),
             Mode::Insert => {
                 presenters::modes::insert::display(&mut self.workspace, &mut self.view, &self.error)
             }
@@ -287,6 +293,7 @@ impl Application {
                     Some("search_select")
                 }
             }
+            Mode::Ex(_) => Some("ex"),
             Mode::SymbolJump(ref mode) => {
                 if mode.insert_mode() {
                     Some("search_select_insert")
@@ -402,6 +409,7 @@ impl Application {
                 self.preferences.borrow().search_select_config(),
             )),
         );
+        self.modes.insert(ModeKey::Ex, Mode::Ex(ExMode::new()));
         self.modes.insert(
             ModeKey::Confirm,
             Mode::Confirm(ConfirmMode::new(
