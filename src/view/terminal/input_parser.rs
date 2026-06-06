@@ -54,6 +54,10 @@ impl Iterator for InputParser {
             }
             // Bare Escape (no following character in this batch)
             [0x1B, ..] => (Key::Esc, 1),
+            [0x1C, ..] => (Key::Ctrl('\\'), 1),
+            [0x1D, ..] => (Key::Ctrl(']'), 1),
+            [0x1E, ..] => (Key::Ctrl('^'), 1),
+            [0x1F, ..] => (Key::Ctrl('_'), 1),
             [0x7F, ..] | [0x08, ..] => (Key::Backspace, 1),
             [0x0A, ..] | [0x0D, ..] => (Key::Enter, 1),
             [0x09, ..] => (Key::Tab, 1),
