@@ -180,7 +180,7 @@ fn parse_mode_key_bindings(
 ///   ctrl-r becomes Key::Ctrl('r')
 ///
 fn parse_key(data: &str) -> Result<Key> {
-    let mut key_components = data.split('-');
+    let mut key_components = data.splitn(2, '-'); // <-- Change this line
     let component = key_components
         .next()
         .context("A keymap key is an empty string")?;

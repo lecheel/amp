@@ -9,6 +9,12 @@ pub fn next_buffer(app: &mut Application) -> Result {
     Ok(())
 }
 
+pub fn prev_buffer(app: &mut Application) -> Result {
+    app.workspace.previous_buffer();
+
+    Ok(())
+}
+
 pub fn new_buffer(app: &mut Application) -> Result {
     util::add_buffer(Buffer::new(), app)
 }

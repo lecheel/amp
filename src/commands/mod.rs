@@ -1,6 +1,7 @@
 use crate::models::application::Application;
 use std::collections::HashMap;
 
+pub mod alias;
 pub mod application;
 pub mod buffer;
 pub mod confirm;
@@ -25,5 +26,13 @@ pub fn hash_map() -> HashMap<&'static str, Command> {
 
     map.insert("application::nop", application::nop);
 
+    // Vim-style command mode aliases
+    map.insert("bn", workspace::next_buffer);
+    map.insert("bp", workspace::prev_buffer);
+    map.insert("bd", buffer::close);
+    map.insert("w", buffer::save);
+    map.insert("q", application::exit);
+    map.insert("wq", alias::save_and_exit);
+    map.insert("q!", alias::force_exit);
     map
 }

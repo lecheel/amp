@@ -13,9 +13,7 @@ pub fn add(app: &mut Application) -> Result {
         .current_buffer
         .as_ref()
         .context(BUFFER_MISSING)?;
-    let mut index = repo
-        .index()
-        .context("Couldn't get the repository index")?;
+    let mut index = repo.index().context("Couldn't get the repository index")?;
     let buffer_path = buffer.path.as_ref().context(BUFFER_PATH_MISSING)?;
     let repo_path = repo.workdir().context("No path found for the repository")?;
     let relative_path = buffer_path
