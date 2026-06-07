@@ -9,6 +9,12 @@ pub fn push_char(app: &mut Application) -> Result {
         if let Mode::Ex(ref mut mode) = app.mode {
             mode.input.push(c);
             mode.update_completions(&app.workspace.path);
+            // Auto-inline only for file completion (`:e ` prefix), not commands.
+            if mode.input.trim_start_matches(':').starts_with("e ") {
+                if mode.completions.len() == 1 {
+                    mode.inline_complete();
+                }
+            }
         }
     }
     Ok(())
@@ -163,14 +169,23 @@ pub fn next_history(app: &mut Application) -> Result {
 
 pub fn complete(app: &mut Application) -> Result {
     if let Mode::Ex(ref mut mode) = app.mode {
-        if mode.completions.len() == 1 {
-            mode.apply_selection();
-        } else if !mode.completions.is_empty() {
-            mode.select_next_completion();
-        } else {
+        if mode.completions.is_empty() {
             mode.update_completions(&app.workspace.path);
-            if mode.completions.len() == 1 {
-                mode.apply_selection();
+        }
+        match mode.completions.len() {
+            0 => {}
+            1 => {
+                // Single candidate: select it so it's visible in the popup,
+                // user confirms with Enter or Tab again to apply.
+                if mode.completion_selection == Some(0) {
+                    // Already selected — second Tab applies it.
+                    mode.apply_selection();
+                } else {
+                    mode.completion_selection = Some(0);
+                }
+            }
+            _ => {
+                mode.select_next_completion();
             }
         }
     }

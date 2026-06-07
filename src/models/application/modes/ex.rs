@@ -33,9 +33,12 @@ impl ExMode {
         self.completions = self.generate_completions(workspace_path);
         if self.completions.is_empty() {
             self.completion_selection = None;
-        } else if let Some(idx) = self.completion_selection {
-            if idx >= self.completions.len() {
-                self.completion_selection = Some(0);
+        } else {
+            match self.completion_selection {
+                // Keep current selection if it's still valid
+                Some(idx) if idx < self.completions.len() => {}
+                // No selection or out of bounds — select the first item
+                _ => self.completion_selection = Some(0),
             }
         }
     }
@@ -97,7 +100,6 @@ impl ExMode {
     }
 
     // ── Grid navigation ──────────────────────────────────
-
     pub fn select_completion_down(&mut self) {
         if self.completions.is_empty() {
             return;
@@ -146,7 +148,6 @@ impl ExMode {
     }
 
     // ── Sequential navigation (Tab / Ctrl-N / Ctrl-P) ────
-
     pub fn select_next_completion(&mut self) {
         if self.completions.is_empty() {
             return;
@@ -180,7 +181,6 @@ impl ExMode {
     }
 
     // ── History navigation ────────────────────────────────
-
     pub fn history_previous(&mut self) {
         if self.history_index > 0 {
             self.history_index -= 1;
@@ -201,8 +201,17 @@ impl ExMode {
         }
     }
 
-    // ── Apply selection ───────────────────────────────────
+    /// Inline-complete the unambiguous suffix into `self.input`.
+    /// Called after `update_completions` when exactly one candidate exists.
+    pub fn inline_complete(&mut self) {
+        if self.completions.len() == 1 {
+            self.input = self.completions[0].value.clone();
+            // Keep the popup visible so the user sees what was applied.
+            // completion_selection stays None until they Tab/navigate.
+        }
+    }
 
+    // ── Apply selection ───────────────────────────────────
     pub fn apply_selection(&mut self) {
         if let Some(idx) = self.completion_selection {
             if let Some(entry) = self.completions.get(idx).cloned() {
