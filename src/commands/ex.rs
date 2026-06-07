@@ -43,8 +43,6 @@ pub fn apply_completion(app: &mut Application) -> Result {
     Ok(())
 }
 
-//--+ src/commands/ex.rs
-
 pub fn accept_input(app: &mut Application) -> Result {
     // If a completion is selected, apply it before executing
     if let Mode::Ex(ref mut mode) = app.mode {

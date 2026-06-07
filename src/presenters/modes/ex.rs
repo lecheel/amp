@@ -38,7 +38,6 @@ pub fn display(
         let col_width = terminal_width / COMPLETION_COLUMNS;
         let row_count = (completions.len() + COMPLETION_COLUMNS - 1) / COMPLETION_COLUMNS;
 
-        // Don't let popup overflow into buffer content
         let max_rows = status_line_y.saturating_sub(1);
         let visible_rows = row_count.min(max_rows);
         let popup_start_y = status_line_y.saturating_sub(visible_rows);
@@ -54,16 +53,27 @@ pub fn display(
                 let x = col * col_width;
                 let y = popup_start_y + row;
 
-                // Format the completion text to fit column width
-                let text = truncate_graphemes(&completions[idx], col_width.saturating_sub(1));
+                // Use the display field for rendering
+                let text =
+                    truncate_graphemes(&completions[idx].display, col_width.saturating_sub(1));
 
                 let colors = if is_selected {
                     Colors::Inverted
-                } else {
+                } else if completions[idx].display.ends_with('/') {
+                    // Directories get a different color
+                    Colors::CustomForeground(crate::view::RGBColor(0x61, 0xAF, 0xEF))
+                // blue
+                } else if completions[idx].display.starts_with(':') {
+                    // Commands get green
                     Colors::CustomForeground(crate::view::RGBColor(0xA9, 0xDC, 0x76))
+                // green
+                } else {
+                    // Files get white/default
+                    Colors::CustomForeground(crate::view::RGBColor(0xAB, 0xB2, 0xBF))
+                    // silver
                 };
 
-                // Clear the cell area first — pass String directly, no &
+                // Clear the cell area first
                 presenter.print(
                     &Position { line: y, offset: x },
                     Style::Default,
@@ -71,7 +81,7 @@ pub fn display(
                     " ".repeat(col_width),
                 );
 
-                // Print the completion text — pass String directly, no &
+                // Print the completion text
                 presenter.print(
                     &Position { line: y, offset: x },
                     if is_selected {

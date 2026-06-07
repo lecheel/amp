@@ -1,14 +1,18 @@
 use std::path::Path;
 
+#[derive(Clone, Debug)]
+pub struct CompletionEntry {
+    pub display: String,
+    pub value: String,
+}
+
 #[derive(Default)]
 pub struct ExMode {
     pub input: String,
     pub history: Vec<String>,
     pub history_index: usize,
-
-    // NEW: completion state
-    pub completions: Vec<String>,
-    pub completion_selection: Option<usize>, // None = no selection
+    pub completions: Vec<CompletionEntry>,
+    pub completion_selection: Option<usize>,
 }
 
 impl ExMode {
@@ -23,10 +27,8 @@ impl ExMode {
         self.completion_selection = None;
     }
 
-    /// Recalculate completions based on current input
     pub fn update_completions(&mut self, workspace_path: &Path) {
         self.completions = self.generate_completions(workspace_path);
-        // Reset selection if completions changed
         if self.completions.is_empty() {
             self.completion_selection = None;
         } else if let Some(idx) = self.completion_selection {
@@ -36,33 +38,59 @@ impl ExMode {
         }
     }
 
-    fn generate_completions(&self, workspace_path: &Path) -> Vec<String> {
+    fn generate_completions(&self, workspace_path: &Path) -> Vec<CompletionEntry> {
         let input = self.input.trim_start_matches(':');
         let mut results = Vec::new();
 
         if input.starts_with("e ") {
-            // File path completion
+            // File path completion — show only the filename
             let prefix = input.splitn(2, ' ').nth(1).unwrap_or("");
             if let Ok(entries) = std::fs::read_dir(workspace_path) {
-                for entry in entries.flatten() {
-                    if let Some(name) = entry.file_name().to_str() {
-                        if name.starts_with(prefix) {
-                            results.push(format!(":e {}", name));
-                        }
-                    }
+                let mut names: Vec<String> = entries
+                    .flatten()
+                    .filter_map(|e| e.file_name().to_str().map(|s| s.to_string()))
+                    .filter(|name| name.starts_with(prefix))
+                    .collect();
+                names.sort();
+
+                for name in names {
+                    let is_dir = workspace_path.join(&name).is_dir();
+                    let display = if is_dir {
+                        format!("{}/", name)
+                    } else {
+                        name.clone()
+                    };
+                    let value = format!(":e {} ", name);
+
+                    results.push(CompletionEntry { display, value });
                 }
             }
-            results.sort();
         } else {
-            // Command completion
-            let commands = [":q", ":q!", ":w", ":wq", ":bn", ":bp", ":bd", ":e", ":ls"];
-            for cmd in &commands {
-                if cmd.starts_with(&self.input) || cmd.starts_with(&format!(":{}", input)) {
-                    results.push(cmd.to_string());
+            // Command completion — display and value are the same
+            let commands = [
+                (":q", ":q"),
+                (":q!", ":q!"),
+                (":w", ":w"),
+                (":wq", ":wq"),
+                (":bn", ":bn"),
+                (":bp", ":bp"),
+                (":bd", ":bd"),
+                (":e ", ":e "),
+                (":ls", ":ls"),
+            ];
+            for (display, value) in &commands {
+                let matches = self.input.starts_with(':') && display.starts_with(&self.input);
+                let matches_no_colon = !self.input.starts_with(':')
+                    && display.trim_start_matches(':').starts_with(input);
+                if matches || matches_no_colon {
+                    results.push(CompletionEntry {
+                        display: display.to_string(),
+                        value: value.to_string(),
+                    });
                 }
             }
-            results.sort();
-            results.dedup();
+            results.sort_by(|a, b| a.display.cmp(&b.display));
+            results.dedup_by(|a, b| a.display == b.display);
         }
 
         results
@@ -77,7 +105,7 @@ impl ExMode {
                 if idx + 1 < self.completions.len() {
                     Some(idx + 1)
                 } else {
-                    Some(0) // wrap around
+                    Some(0)
                 }
             }
             None => Some(0),
@@ -93,7 +121,7 @@ impl ExMode {
                 if idx > 0 {
                     Some(idx - 1)
                 } else {
-                    Some(self.completions.len() - 1) // wrap around
+                    Some(self.completions.len() - 1)
                 }
             }
             None => Some(self.completions.len() - 1),
@@ -102,12 +130,8 @@ impl ExMode {
 
     pub fn apply_selection(&mut self) {
         if let Some(idx) = self.completion_selection {
-            if let Some(completion) = self.completions.get(idx).cloned() {
-                self.input = completion;
-                // Add trailing space for :e to make typing path easier
-                if self.input.starts_with(":e ") && !self.input.ends_with(' ') {
-                    self.input.push(' ');
-                }
+            if let Some(entry) = self.completions.get(idx).cloned() {
+                self.input = entry.value;
                 self.completions.clear();
                 self.completion_selection = None;
             }
