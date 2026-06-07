@@ -1,3 +1,5 @@
+//--+ src/commands/rg.rs
+
 use crate::commands::{self, Result};
 use crate::errors::*;
 use crate::models::application::{Application, BufferMetadata, BufferType};
@@ -16,13 +18,14 @@ pub fn search(app: &mut Application, pattern: &str) -> Result {
 
     let workspace_path = app.workspace.path.clone();
 
-    // Run ripgrep with --vimgrep for consistent "file:line:col:text" output
+    // Use --heading for grouped output, --line-number and --column for precise jumps
     let output = Command::new("rg")
         .args([
-            "--vimgrep",
+            "--column",
+            "--line-number",
+            "--heading",
             "--color",
             "never",
-            "--no-heading",
             "--max-count",
             "500",
             pattern,
@@ -79,6 +82,7 @@ pub fn search(app: &mut Application, pattern: &str) -> Result {
             );
         }
     }
+
     commands::application::switch_to_normal_mode(app)?;
     Ok(())
 }
@@ -104,46 +108,72 @@ pub fn search_under_cursor(app: &mut Application) -> Result {
 
 /// Open the file/line under the cursor in the rg results buffer.
 pub fn open_under_cursor(app: &mut Application) -> Result {
-    // Check if we're in an rg results buffer
-    let is_rg_buffer = app
+    let buffer = app
         .workspace
         .current_buffer
         .as_ref()
-        .and_then(|b| b.path.as_ref())
-        .map(|p| p.to_string_lossy() == RG_BUFFER_PATH)
-        .unwrap_or(false);
+        .context(BUFFER_MISSING)?;
+    let data = buffer.data();
+    let current_line_idx = buffer.cursor.line;
 
-    if !is_rg_buffer {
-        // Fall back to buffer_list or symbol jump
-        return crate::commands::buffer_list::open_under_cursor(app);
-    }
-
-    let line = app
-        .workspace
-        .current_buffer
-        .as_ref()
-        .and_then(|b| b.data().lines().nth(b.cursor.line).map(|s| s.to_string()))
+    let current_line = data
+        .lines()
+        .nth(current_line_idx)
         .context("No line under cursor")?;
 
-    // Skip header lines (search pattern line and blank line)
-    if line.starts_with("Searching for:") || line.is_empty() || line.starts_with("No matches") {
+    // Skip header lines and empty lines
+    if current_line.is_empty()
+        || current_line.starts_with("Searching for:")
+        || current_line.starts_with("No matches")
+    {
         bail!("Not a result line");
     }
 
-    // Parse vimgrep format: path/to/file:line:col:text
-    let parts: Vec<&str> = line.splitn(4, ':').collect();
-    if parts.len() < 3 {
+    // Parse the current match line: "line_num:col_num:text" or "line_num:text"
+    let parts: Vec<&str> = current_line.splitn(3, ':').collect();
+    if parts.len() < 2 {
         bail!("Could not parse result line");
     }
 
-    let file_path = parts[0];
-    let line_num: usize = parts[1].parse().context("Could not parse line number")?;
+    let line_num: usize = parts[0].parse().context("Could not parse line number")?;
+    let col_num: Option<usize> = if parts.len() == 3 {
+        parts[1].parse().ok()
+    } else {
+        None
+    };
+
+    // Find the file path by scanning backwards for the heading line
+    let mut file_path = None;
+    for i in (0..current_line_idx).rev() {
+        if let Some(prev_line) = data.lines().nth(i) {
+            if prev_line.is_empty()
+                || prev_line.starts_with("Searching for:")
+                || prev_line.starts_with("No matches")
+            {
+                break; // Reached the boundary of the current group
+            }
+
+            // If the line doesn't start with a digit, it's the file path heading
+            let starts_with_digit = prev_line
+                .trim_start()
+                .chars()
+                .next()
+                .map_or(false, |c| c.is_ascii_digit());
+
+            if !starts_with_digit {
+                file_path = Some(prev_line.trim().to_string());
+                break;
+            }
+        }
+    }
+
+    let file_path_str = file_path.context("Could not find file path for this result")?;
 
     // Make path absolute relative to workspace
-    let absolute_path = if Path::new(file_path).is_absolute() {
-        PathBuf::from(file_path)
+    let absolute_path = if Path::new(&file_path_str).is_absolute() {
+        PathBuf::from(file_path_str)
     } else {
-        app.workspace.path.join(file_path)
+        app.workspace.path.join(&file_path_str)
     };
 
     if !absolute_path.exists() {
@@ -153,12 +183,13 @@ pub fn open_under_cursor(app: &mut Application) -> Result {
     // Open the file
     crate::util::open_buffer(&absolute_path, app)?;
 
-    // Move to the correct line
+    // Move to the correct line (and column if available)
     if let Some(buf) = app.workspace.current_buffer.as_mut() {
         let target_line = line_num.saturating_sub(1); // rg is 1-indexed
+        let target_col = col_num.unwrap_or(1).saturating_sub(1); // col is 1-indexed, fallback to 1
         buf.cursor.move_to(Position {
             line: target_line,
-            offset: 0,
+            offset: target_col,
         });
     }
 
@@ -168,6 +199,7 @@ pub fn open_under_cursor(app: &mut Application) -> Result {
 }
 
 // ── Helpers ──────────────────────────────────────────────
+
 fn find_rg_buffer_id(app: &mut Application) -> Option<usize> {
     let start_id = app.workspace.current_buffer.as_ref().map(|b| b.id);
     let mut first = true;
