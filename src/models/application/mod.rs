@@ -102,6 +102,7 @@ impl Application {
 
         let multiline_error = self.error.as_ref().and_then(|err| {
             let s = err.to_string();
+
             if s.lines().count() > 1 {
                 Some(s)
             } else {

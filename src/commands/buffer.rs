@@ -1154,92 +1154,17 @@ pub fn fmt_save(app: &mut Application) -> Result {
             .save()
             .context(BUFFER_SAVE_FAILED)?;
 
-        // Determine formatter based on file extension
-        let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        // If a format tool is defined for this file type, run it
+        if app.preferences.borrow().format_command(&path).is_some() {
+            format(app)?;
 
-        let (format_command, tool_name): (Option<std::process::Command>, &str) = match extension {
-            "rs" => {
-                let mut cmd = std::process::Command::new("rustfmt");
-                cmd.arg("--edition").arg("2021").arg("--emit").arg("stdout");
-                (Some(cmd), "rustfmt")
-            }
-            "py" => {
-                let mut cmd = std::process::Command::new("ruff");
-                cmd.arg("format");
-                cmd.arg("-");
-                cmd.arg("--stdin-filename").arg(&path);
-                (Some(cmd), "ruff")
-            }
-            _ => (None, ""),
-        };
-
-        // Run the formatter if applicable
-        if let Some(mut cmd) = format_command {
-            let data = app
-                .workspace
+            // Save the buffer again after successful formatting
+            app.workspace
                 .current_buffer
-                .as_ref()
-                .context(BUFFER_MISSING)?
-                .data();
-
-            let mut process = cmd
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()
-                .with_context(|| format!("{tool_name} not found. Is it installed?"))?;
-
-            {
-                let mut format_input = process.stdin.take().context("Failed to open stdin")?;
-                std::thread::spawn(move || {
-                    let _ = format_input.write_all(data.as_bytes());
-                });
-            }
-
-            let output = process
-                .wait_with_output()
-                .context("Failed to read format tool output")?;
-
-            if output.status.success() {
-                let content = String::from_utf8(output.stdout)
-                    .context("Failed to parse format tool output as UTF8")?;
-                app.workspace
-                    .current_buffer
-                    .as_mut()
-                    .context(BUFFER_MISSING)?
-                    .replace(content);
-
-                // Save the formatted content
-                app.workspace
-                    .current_buffer
-                    .as_mut()
-                    .unwrap()
-                    .save()
-                    .context(BUFFER_SAVE_FAILED)?;
-            } else {
-                // rustfmt --emit stdout writes error diagnostics to stdout,
-                // so we must capture BOTH stdout and stderr to avoid swallowing the error.
-                let stderr = String::from_utf8(output.stderr)
-                    .unwrap_or_else(|_| String::from("Failed to parse stderr output as UTF8"));
-                let stdout = String::from_utf8(output.stdout)
-                    .unwrap_or_else(|_| String::from("Failed to parse stdout output as UTF8"));
-
-                let mut parts = Vec::new();
-                if !stdout.is_empty() {
-                    parts.push(stdout);
-                }
-                if !stderr.is_empty() {
-                    parts.push(stderr);
-                }
-                let error = if parts.is_empty() {
-                    format!("exited with code {}", output.status)
-                } else {
-                    parts.join("\n")
-                };
-
-                // File was already saved before formatting; report the format error
-                bail!("{tool_name} failed:\n{error}");
-            }
+                .as_mut()
+                .unwrap()
+                .save()
+                .context(BUFFER_SAVE_FAILED)?;
         }
     } else {
         commands::application::switch_to_path_mode(app)?;
@@ -1266,37 +1191,51 @@ pub fn format(app: &mut Application) -> Result {
         .context(FORMAT_TOOL_MISSING)?;
     let data = buf.data();
 
-    // Run the command with the buffer path as an argument.
     let mut process = format_command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
+        .stderr(Stdio::piped()) // Make sure this is here!
         .spawn()
         .context("Failed to spawn format tool")?;
 
     let mut format_input = process.stdin.take().context("Failed to open stdin")?;
     std::thread::spawn(move || {
-        format_input
-            .write_all(data.as_bytes())
-            .expect("Failed to write to stdin");
+        let _ = format_input.write_all(data.as_bytes());
     });
 
     let output = process
         .wait_with_output()
-        .context("Failed to read stdout")?;
+        .context("Failed to read format tool output")?;
 
-    // Reload buffer or propagate errors.
     if output.status.success() {
         let content = String::from_utf8(output.stdout)
             .context("Failed to parse format tool output as UTF8")?;
         buf.replace(content);
-
         Ok(())
     } else {
-        let error = String::from_utf8(output.stderr)
-            .unwrap_or(String::from("Failed to parse stderr output as UTF8"));
+        let stderr = String::from_utf8(output.stderr)
+            .unwrap_or_else(|_| String::from("Failed to parse stderr output as UTF8"));
+        let stdout = String::from_utf8(output.stdout)
+            .unwrap_or_else(|_| String::from("Failed to parse stdout output as UTF8"));
 
-        Err(anyhow!(error))
-            .with_context(|| format!("Format tool failed with code {}", output.status))
+        let mut parts = Vec::new();
+        if !stdout.is_empty() {
+            parts.push(stdout);
+        }
+        if !stderr.is_empty() {
+            parts.push(stderr);
+        }
+        let error = if parts.is_empty() {
+            format!("exited with code {}", output.status)
+        } else {
+            parts.join("\n")
+        };
+
+        bail!(
+            "Format tool failed with code {}\n{}",
+            output.status,
+            error.trim()
+        );
     }
 }
 
