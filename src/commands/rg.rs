@@ -378,6 +378,7 @@ fn navigate_result(app: &mut Application, direction: Direction) -> Result {
 
     let mut current_line = buffer.cursor.line;
     let offset = buffer.cursor.offset;
+    let mut found_result = false;
 
     // Scan for the next valid result line
     for _ in 0..total_lines {
@@ -405,12 +406,17 @@ fn navigate_result(app: &mut Application, direction: Direction) -> Result {
                     line: current_line,
                     offset,
                 });
+                found_result = true;
                 break;
             }
         }
     }
 
-    // Now that the cursor is on a valid result, open it
+    if !found_result {
+        bail!("No result lines found in ripgrep buffer");
+    }
+
+    // Now that the cursor is on a valid result, open it (which also centers the screen)
     open_under_cursor(app)
 }
 
