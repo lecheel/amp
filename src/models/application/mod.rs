@@ -95,12 +95,48 @@ impl Application {
         Ok(())
     }
 
+    // src/models/application/mod.rs — render()
+
     fn render(&mut self) -> Result<()> {
-        // Compute git gutter status for the current buffer
         self.view.gutter_statuses = self.compute_gutter_statuses();
 
+        let multiline_error = self.error.as_ref().and_then(|err| {
+            let s = err.to_string();
+            if s.lines().count() > 1 {
+                Some(s)
+            } else {
+                None
+            }
+        });
+
+        if multiline_error.is_some() {
+            self.error = None;
+        }
+
+        // Present the current mode
         if let Err(error) = self.present() {
-            presenters::error::display(&mut self.workspace, &mut self.view, &error)?;
+            let error_string = error.to_string();
+            let lines: Vec<&str> = error_string.lines().collect();
+
+            if lines.len() > 1 {
+                let (title, body) = extract_error_title(&lines);
+                let mut presenter = self.view.build_presenter()?;
+                presenter.overlay = true; // ← ADD
+                presenter.print_error_box(title, body);
+                presenter.present()?;
+            } else {
+                presenters::error::display(&mut self.workspace, &mut self.view, &error)?;
+            }
+        }
+
+        // Overlay the multi-line error box on top of the normal display
+        if let Some(error_string) = multiline_error {
+            let lines: Vec<&str> = error_string.lines().collect();
+            let (title, body) = extract_error_title(&lines);
+            let mut presenter = self.view.build_presenter()?;
+            presenter.overlay = true;
+            presenter.print_error_box(title, body);
+            presenter.present()?;
         }
 
         Ok(())
@@ -820,4 +856,30 @@ mod tests {
         assert_eq!(app.current_mode, ModeKey::Insert);
         assert!(matches!(app.mode, Mode::Insert));
     }
+}
+
+/// Splits multi-line error output into a short title and body lines.
+///
+/// "rustfmt failed: error[E0425]: cannot find value `x`"
+///  ───────────────   ────────────────────────────────────
+///  title (prefix)     body (all lines, including detail)
+fn extract_error_title<'a, 'b>(lines: &'b [&'a str]) -> (&'a str, &'b [&'a str]) {
+    if lines.is_empty() {
+        return ("Error", &[]);
+    }
+
+    let first = lines[0];
+
+    // If the first line has a ": " separator, use the part before it as title
+    // and keep all lines as body (the first line still has the detail after ": ")
+    if let Some(pos) = first.find(": ") {
+        return (&first[..pos], lines);
+    }
+
+    // No separator — use first line as title, rest as body
+    if lines.len() > 1 {
+        return (first, &lines[1..]);
+    }
+
+    (first, &[])
 }

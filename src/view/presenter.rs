@@ -11,6 +11,7 @@ use scribe::util::LineIterator;
 use std::borrow::Cow;
 use syntect::highlighting::Theme;
 use syntect::parsing::SyntaxSet;
+use unicode_segmentation::UnicodeSegmentation;
 
 /// The `Presenter` type forms the main view API for mode-specific presenters.
 /// It provides the ability to read view dimensions, draw individual character
@@ -21,6 +22,7 @@ pub struct Presenter<'p> {
     terminal_buffer: TerminalBuffer<'p>,
     theme: Theme,
     pub view: &'p mut View,
+    pub overlay: bool,
 }
 
 impl<'p> Presenter<'p> {
@@ -51,6 +53,7 @@ impl<'p> Presenter<'p> {
             terminal_buffer: TerminalBuffer::new(view.terminal.width(), view.terminal.height()),
             theme,
             view,
+            overlay: false,
         })
     }
 
@@ -79,6 +82,15 @@ impl<'p> Presenter<'p> {
         let transparent_background = self.view.preferences.borrow().transparent_background();
 
         for (position, cell) in self.terminal_buffer.iter() {
+            // In overlay mode, skip default cells to preserve the underlying render
+            if self.overlay
+                && cell.content == " "
+                && matches!(cell.colors, Colors::Default)
+                && matches!(cell.style, Style::Default)
+            {
+                continue;
+            }
+
             self.view.terminal.print(
                 &position,
                 cell.style,
@@ -203,6 +215,96 @@ impl<'p> Presenter<'p> {
                 colors,
             },
         );
+    }
+
+    pub fn print_messages_box(&mut self, title: &str, lines: &[&str], _accent: Colors) {
+        const MAX_LINES: usize = 8;
+        let mut visible: Vec<String> = Vec::new();
+        if !title.is_empty() {
+            visible.push(title.to_string());
+        }
+        visible.extend(lines.iter().take(MAX_LINES).map(|s| s.to_string()));
+        if lines.len() > MAX_LINES {
+            if let Some(last) = visible.last_mut() {
+                *last = format!("{}…", last.trim_end());
+            }
+        }
+        if visible.is_empty() {
+            return;
+        }
+
+        let box_w = std::cmp::max((self.width() as f32 * 0.9).ceil() as usize, 20);
+        let inner_w = box_w.saturating_sub(4);
+
+        for line in &mut visible {
+            let g: Vec<&str> = line.graphemes(true).collect();
+            if g.len() > inner_w {
+                *line = format!("{}…", g[..inner_w.saturating_sub(1)].join(""));
+            }
+        }
+
+        let box_h = visible.len();
+        let bottom_row = self.height().saturating_sub(2);
+        let row0 = bottom_row.saturating_sub(box_h.saturating_sub(1));
+        let col0 = self.width().saturating_sub(box_w) / 2;
+
+        let dark_bg = crate::view::RGBColor(0x1E, 0x1E, 0x2E);
+        let light_fg = crate::view::RGBColor(0xC0, 0xCA, 0xF5);
+        let dark_colors = Colors::Custom(light_fg, dark_bg);
+
+        for (i, line) in visible.iter().enumerate() {
+            let row = row0 + i;
+
+            // Fill background cell-by-cell
+            for c in 0..box_w {
+                self.print(
+                    &Position {
+                        line: row,
+                        offset: col0 + c,
+                    },
+                    Style::Default,
+                    dark_colors,
+                    " ",
+                );
+            }
+
+            // Write text grapheme-by-grapheme so each column cell is set correctly
+            for (gi, grapheme) in line.graphemes(true).enumerate() {
+                if gi >= inner_w {
+                    break;
+                }
+                self.print(
+                    &Position {
+                        line: row,
+                        offset: col0 + 2 + gi,
+                    },
+                    Style::Default,
+                    dark_colors,
+                    grapheme.to_string(),
+                );
+            }
+        }
+    }
+
+    /// Convenience: error message box (white on orange).
+    pub fn print_error_box(&mut self, title: &str, lines: &[&str]) {
+        self.print_messages_box(title, lines, Colors::Warning);
+    }
+
+    /// Convenience: info message box (white on blue).
+    pub fn print_info_box(&mut self, title: &str, lines: &[&str]) {
+        self.print_messages_box(title, lines, Colors::SelectMode);
+    }
+
+    /// Convenience: success message box (white on green).
+    pub fn print_success_box(&mut self, title: &str, lines: &[&str]) {
+        self.print_messages_box(title, lines, Colors::Insert);
+    }
+
+    /// Splits a multi-line error string and displays it in a message box.
+    pub fn print_error_box_from_string(&mut self, title: &str, error: &str) {
+        let lines: Vec<&str> = error.lines().collect();
+        self.print_error_box(title, &lines);
     }
 }
 

@@ -1160,7 +1160,7 @@ pub fn fmt_save(app: &mut Application) -> Result {
         let (format_command, tool_name): (Option<std::process::Command>, &str) = match extension {
             "rs" => {
                 let mut cmd = std::process::Command::new("rustfmt");
-                cmd.arg("--edition").arg("2021");
+                cmd.arg("--edition").arg("2021").arg("--emit").arg("stdout");
                 (Some(cmd), "rustfmt")
             }
             "py" => {
@@ -1185,6 +1185,7 @@ pub fn fmt_save(app: &mut Application) -> Result {
             let mut process = cmd
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
                 .spawn()
                 .with_context(|| format!("{tool_name} not found. Is it installed?"))?;
 
@@ -1216,10 +1217,28 @@ pub fn fmt_save(app: &mut Application) -> Result {
                     .save()
                     .context(BUFFER_SAVE_FAILED)?;
             } else {
-                let error = String::from_utf8(output.stderr)
+                // rustfmt --emit stdout writes error diagnostics to stdout,
+                // so we must capture BOTH stdout and stderr to avoid swallowing the error.
+                let stderr = String::from_utf8(output.stderr)
                     .unwrap_or_else(|_| String::from("Failed to parse stderr output as UTF8"));
+                let stdout = String::from_utf8(output.stdout)
+                    .unwrap_or_else(|_| String::from("Failed to parse stdout output as UTF8"));
+
+                let mut parts = Vec::new();
+                if !stdout.is_empty() {
+                    parts.push(stdout);
+                }
+                if !stderr.is_empty() {
+                    parts.push(stderr);
+                }
+                let error = if parts.is_empty() {
+                    format!("exited with code {}", output.status)
+                } else {
+                    parts.join("\n")
+                };
+
                 // File was already saved before formatting; report the format error
-                bail!("{} failed: {}", tool_name, error);
+                bail!("{tool_name} failed:\n{error}");
             }
         }
     } else {
