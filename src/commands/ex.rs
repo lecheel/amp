@@ -1,11 +1,12 @@
 use crate::commands::{self, Result};
 use crate::errors::*;
+use crate::input::Key;
 use crate::models::application::{Application, Mode};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub fn push_char(app: &mut Application) -> Result {
     let key = app.view.last_key().as_ref().context("No key press")?;
-    if let crate::input::Key::Char(c) = *key {
+    if let Key::Char(c) = *key {
         if let Mode::Ex(ref mut mode) = app.mode {
             mode.input.push(c);
             mode.update_completions(&app.workspace.path);
@@ -13,6 +14,7 @@ pub fn push_char(app: &mut Application) -> Result {
             if mode.input.trim_start_matches(':').starts_with("e ") {
                 if mode.completions.len() == 1 {
                     mode.inline_complete();
+                    walk_into_directory(app)?;
                 }
             }
         }
@@ -57,7 +59,6 @@ pub fn navigate_left(app: &mut Application) -> Result {
         if !mode.completions.is_empty() {
             mode.select_completion_left();
         }
-        // No history fallback for left/right
     }
     Ok(())
 }
@@ -91,7 +92,7 @@ pub fn apply_completion(app: &mut Application) -> Result {
     if let Mode::Ex(ref mut mode) = app.mode {
         mode.apply_selection();
     }
-    Ok(())
+    walk_into_directory(app)
 }
 
 pub fn accept_input(app: &mut Application) -> Result {
@@ -108,6 +109,37 @@ pub fn accept_input(app: &mut Application) -> Result {
         bail!("Not in ex mode");
     };
 
+    // Parse early so we can intercept :e on a directory
+    let parts: Vec<&str> = input.splitn(2, ' ').collect();
+    let cmd = parts.get(0).copied().unwrap_or("");
+    let arg = parts.get(1).copied().unwrap_or("").trim();
+
+    // For :e, if the resolved path is a directory, walk into it
+    // instead of trying (and failing) to open it as a file.
+    if cmd == "e" && !arg.is_empty() {
+        let path = Path::new(arg);
+        let full_path = if path.is_absolute() {
+            PathBuf::from(path)
+        } else {
+            app.workspace.path.join(path)
+        };
+
+        if full_path.is_dir() {
+            if let Mode::Ex(ref mut mode) = app.mode {
+                let clean_arg = arg.trim_end();
+                // Ensure the input has a trailing slash
+                if !clean_arg.ends_with('/') {
+                    mode.input = format!(":e {}/", clean_arg);
+                }
+                // Always refresh — completions for the parent prefix
+                // are stale now that we're inside the directory.
+                mode.completion_selection = None;
+                mode.update_completions(&app.workspace.path);
+            }
+            return Ok(());
+        }
+    }
+
     // Save to history
     if let Mode::Ex(ref mut mode) = app.mode {
         if !input.is_empty() {
@@ -119,11 +151,7 @@ pub fn accept_input(app: &mut Application) -> Result {
         mode.completion_selection = None;
     }
 
-    // Parse and execute
-    let parts: Vec<&str> = input.splitn(2, ' ').collect();
-    let cmd = parts.get(0).copied().unwrap_or("");
-    let arg = parts.get(1).copied().unwrap_or("").trim();
-
+    // Execute
     match cmd {
         "q" => commands::application::exit(app)?,
         "q!" => commands::alias::force_exit(app)?,
@@ -179,10 +207,7 @@ pub fn complete(app: &mut Application) -> Result {
         match mode.completions.len() {
             0 => {}
             1 => {
-                // Single candidate: select it so it's visible in the popup,
-                // user confirms with Enter or Tab again to apply.
                 if mode.completion_selection == Some(0) {
-                    // Already selected — second Tab applies it.
                     mode.apply_selection();
                 } else {
                     mode.completion_selection = Some(0);
@@ -190,6 +215,42 @@ pub fn complete(app: &mut Application) -> Result {
             }
             _ => {
                 mode.select_next_completion();
+            }
+        }
+    }
+    walk_into_directory(app)
+}
+
+/// After a completion is applied for the `:e` command, check if the
+/// resulting path is a directory. If so, strip any trailing whitespace
+/// that `apply_selection`/`inline_complete` may have added, append `/`
+/// if missing, and ALWAYS refresh completions so the popup shows the
+/// directory's contents.
+fn walk_into_directory(app: &mut Application) -> Result {
+    if let Mode::Ex(ref mut mode) = app.mode {
+        let trimmed_input = mode.input.trim_start_matches(':');
+        if let Some(path_part) = trimmed_input.strip_prefix("e ") {
+            // trim_end() removes the trailing space that
+            // apply_selection/inline_complete insert after a completed
+            // path.  Without this we'd produce ":e src /" instead of
+            // ":e src/".
+            let path_part = path_part.trim_end();
+            let full_path = if Path::new(path_part).is_absolute() {
+                PathBuf::from(path_part)
+            } else {
+                app.workspace.path.join(path_part)
+            };
+            if full_path.is_dir() {
+                // Ensure trailing slash
+                if !path_part.ends_with('/') {
+                    mode.input = format!(":e {}/", path_part);
+                }
+                // Always refresh completions for the directory contents,
+                // even when the path already ends with '/'.  The previous
+                // completions (matching the parent prefix like "src") are
+                // stale once we've stepped inside the directory.
+                mode.completion_selection = None;
+                mode.update_completions(&app.workspace.path);
             }
         }
     }

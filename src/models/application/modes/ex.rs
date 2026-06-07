@@ -49,23 +49,45 @@ impl ExMode {
 
         if input.starts_with("e ") {
             let prefix = input.splitn(2, ' ').nth(1).unwrap_or("");
-            if let Ok(entries) = std::fs::read_dir(workspace_path) {
+
+            // Split into the directory to read and the filename prefix to filter by.
+            // "src/"        -> dir="src/",  file_prefix=""
+            // "src/mo"      -> dir="src/",  file_prefix="mo"
+            // "Cargo"       -> dir="",      file_prefix="Cargo"
+            let (dir_part, file_prefix) = match prefix.rfind('/') {
+                Some(slash) => (&prefix[..=slash], &prefix[slash + 1..]),
+                None => ("", prefix),
+            };
+
+            let search_dir = if dir_part.is_empty() {
+                workspace_path.to_path_buf()
+            } else {
+                let p = Path::new(dir_part);
+                if p.is_absolute() {
+                    p.to_path_buf()
+                } else {
+                    workspace_path.join(dir_part)
+                }
+            };
+
+            if let Ok(entries) = std::fs::read_dir(&search_dir) {
                 let mut names: Vec<String> = entries
                     .flatten()
                     .filter_map(|e| e.file_name().to_str().map(|s| s.to_string()))
-                    .filter(|name| name.starts_with(prefix))
+                    .filter(|name| name.starts_with(file_prefix))
                     .collect();
                 names.sort();
 
                 for name in names {
-                    let is_dir = workspace_path.join(&name).is_dir();
+                    let full_rel = format!("{}{}", dir_part, name);
+                    let is_dir = workspace_path.join(&full_rel).is_dir();
                     let display = if is_dir {
-                        format!("{}/", name)
+                        format!("{}/", name) // Show only the item name, not the dir prefix
                     } else {
-                        name.clone()
+                        name.clone() // Show only the item name
                     };
-                    let value = format!(":e {} ", name);
-
+                    // Trailing space signals "complete, ready to accept"
+                    let value = format!(":e {} ", full_rel);
                     results.push(CompletionEntry { display, value });
                 }
             }
@@ -113,7 +135,6 @@ impl ExMode {
         if below < self.completions.len() {
             self.completion_selection = Some(below);
         }
-        // If at bottom row, do nothing (clamp)
     }
 
     pub fn select_completion_up(&mut self) {
@@ -124,7 +145,6 @@ impl ExMode {
         if current >= COMPLETION_COLUMNS {
             self.completion_selection = Some(current - COMPLETION_COLUMNS);
         }
-        // If at top row, do nothing (clamp)
     }
 
     pub fn select_completion_right(&mut self) {
@@ -134,7 +154,6 @@ impl ExMode {
         let current = self.completion_selection.unwrap_or(0);
         let current_row = current / COMPLETION_COLUMNS;
         let next_in_row = current + 1;
-        // Stay in same row and don't go past end
         if next_in_row / COMPLETION_COLUMNS == current_row && next_in_row < self.completions.len() {
             self.completion_selection = Some(next_in_row);
         }
@@ -148,7 +167,6 @@ impl ExMode {
         if current % COMPLETION_COLUMNS > 0 {
             self.completion_selection = Some(current - 1);
         }
-        // If at leftmost column, do nothing (clamp)
     }
 
     // ── Sequential navigation (Tab / Ctrl-N / Ctrl-P) ────
@@ -161,7 +179,7 @@ impl ExMode {
                 if idx + 1 < self.completions.len() {
                     Some(idx + 1)
                 } else {
-                    Some(0) // wrap
+                    Some(0)
                 }
             }
             None => Some(0),
@@ -177,7 +195,7 @@ impl ExMode {
                 if idx > 0 {
                     Some(idx - 1)
                 } else {
-                    Some(self.completions.len() - 1) // wrap
+                    Some(self.completions.len() - 1)
                 }
             }
             None => Some(self.completions.len() - 1),
@@ -210,8 +228,6 @@ impl ExMode {
     pub fn inline_complete(&mut self) {
         if self.completions.len() == 1 {
             self.input = self.completions[0].value.clone();
-            // Keep the popup visible so the user sees what was applied.
-            // completion_selection stays None until they Tab/navigate.
         }
     }
 
