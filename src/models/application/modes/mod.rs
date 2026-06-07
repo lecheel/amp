@@ -33,6 +33,7 @@ pub enum Mode {
     PendingLeftBracket(PendingLeftBracketMode),
     PendingRightBracket(PendingRightBracketMode),
     PendingYank(PendingYankMode),
+    PendingLeader(PendingLeaderMode),
     Search(SearchMode),
     Select(SelectMode),
     SelectLine(SelectLineMode),
@@ -59,6 +60,7 @@ pub enum ModeKey {
     PendingLeftBracket,
     PendingRightBracket,
     PendingYank,
+    Leader,
     Search,
     Select,
     SelectLine,
@@ -80,8 +82,29 @@ pub use self::select_line::SelectLineMode;
 pub use self::symbol_jump::SymbolJumpMode;
 pub use self::syntax::SyntaxMode;
 pub use self::theme::ThemeMode;
+use crate::input::Key;
 
 // Pending mode types
+
+#[derive(Default)]
+pub struct PendingLeaderMode {
+    pub keys: Vec<Key>,
+}
+
+impl PendingLeaderMode {
+    pub fn new() -> Self {
+        PendingLeaderMode { keys: Vec::new() }
+    }
+    pub fn reset(&mut self) {
+        self.keys.clear();
+    }
+}
+
+impl fmt::Display for PendingLeaderMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "LEADER")
+    }
+}
 
 #[derive(Default)]
 pub struct PendingChangeMode;

@@ -9,6 +9,7 @@ pub mod paste;
 pub mod path;
 pub mod pending_change;
 pub mod pending_delete;
+pub mod pending_leader;
 pub mod pending_left_bracket;
 pub mod pending_right_bracket;
 pub mod pending_yank;

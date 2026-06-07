@@ -212,6 +212,17 @@ pending_right_bracket:
     - application::switch_to_normal_mode
     - application::handle_input
 
+leader:
+  g:
+    r: git::revert_hunk
+  _:
+    - application::switch_to_normal_mode
+    - application::handle_input
+
+pending_leader:
+  escape: application::switch_to_normal_mode
+  _: application::leader_push_key
+
 insert:
   _: buffer::insert_char
   enter: buffer::insert_newline

@@ -1,5 +1,6 @@
 use crate::commands::{self, Result};
 use crate::errors::*;
+use crate::input::key_map::LeaderLookup;
 use crate::input::KeyMap;
 use crate::models::application::{Application, Mode, ModeKey};
 use crate::models::application::{BufferMetadata, BufferType};
@@ -156,6 +157,58 @@ pub fn open_under_cursor(app: &mut Application) -> Result {
         Some("[Ripgrep Results]") => commands::rg::open_under_cursor(app),
         _ => commands::application::switch_to_symbol_jump_mode(app),
     }
+}
+
+pub fn leader_push_key(app: &mut Application) -> Result {
+    let key = match app.view.last_key.clone() {
+        Some(k) => k,
+        None => return Ok(()),
+    };
+
+    // Push key into sequence
+    if let Mode::PendingLeader(ref mut mode) = app.mode {
+        mode.keys.push(key);
+    }
+
+    // Clone sequence out to avoid borrow conflicts
+    let keys = match app.mode {
+        Mode::PendingLeader(ref mode) => mode.keys.clone(),
+        _ => return Ok(()),
+    };
+
+    // Perform the lookup and bind to a variable so the Ref<Preferences>
+    // borrow is dropped before we mutably borrow `app` in the match arms.
+    let lookup_result = app.preferences.borrow().keymap().leader_lookup(&keys);
+
+    match lookup_result {
+        LeaderLookup::Found(cmds) => {
+            // Reset before running so commands see clean leader state
+            if let Mode::PendingLeader(ref mut m) = app.mode {
+                m.reset();
+            }
+            switch_to_normal_mode(app)?;
+            for cmd in cmds {
+                cmd(app)?;
+            }
+        }
+        LeaderLookup::Prefix => {
+            // valid prefix — stay in pending_leader, wait for next key
+        }
+        LeaderLookup::NoMatch => {
+            if let Mode::PendingLeader(ref mut m) = app.mode {
+                m.reset();
+            }
+            switch_to_normal_mode(app)?;
+            // re-dispatch the stray key in normal mode
+            commands::application::handle_input(app)?;
+        }
+    }
+    Ok(())
+}
+
+pub fn switch_to_pending_leader_mode(app: &mut Application) -> Result {
+    app.switch_to(ModeKey::Leader);
+    Ok(())
 }
 
 pub fn switch_to_ex_mode(app: &mut Application) -> Result {

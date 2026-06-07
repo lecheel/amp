@@ -231,6 +231,11 @@ impl Application {
                 &self.repository,
                 &self.error,
             ),
+            Mode::PendingLeader(_) => presenters::modes::pending_leader::display(
+                &mut self.workspace,
+                &mut self.view,
+                &self.error,
+            ),
             Mode::SymbolJump(ref mut mode) => presenters::modes::search_select::display(
                 &mut self.workspace,
                 mode,
@@ -394,6 +399,7 @@ impl Application {
             Mode::PendingYank(_) => Some("pending_yank"),
             Mode::PendingLeftBracket(_) => Some("pending_left_bracket"),
             Mode::PendingRightBracket(_) => Some("pending_right_bracket"),
+            Mode::PendingLeader(_) => Some("pending_leader"),
             Mode::Select(_) => Some("select"),
             Mode::SelectLine(_) => Some("select_line"),
             Mode::Search(ref mode) => {
@@ -442,6 +448,10 @@ impl Application {
         self.modes.insert(ModeKey::Insert, Mode::Insert);
         self.modes.insert(ModeKey::Normal, Mode::Normal);
         self.modes.insert(ModeKey::Paste, Mode::Paste);
+        self.modes.insert(
+            ModeKey::Leader,
+            Mode::PendingLeader(PendingLeaderMode::new()),
+        );
         self.modes.insert(
             ModeKey::PendingChange,
             Mode::PendingChange(PendingChangeMode::new()),

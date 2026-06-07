@@ -6,10 +6,43 @@ use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use yaml_rust::yaml::{Hash, Yaml, YamlLoader};
 
-/// Nested HashMap newtype that provides a more ergonomic interface.
-pub struct KeyMap(HashMap<String, HashMap<Key, SmallVec<[Command; 4]>>>);
+pub enum LeaderNode {
+    Command(SmallVec<[Command; 4]>),
+    Subtree(HashMap<Key, LeaderNode>),
+}
+
+pub struct KeyMap(
+    HashMap<String, HashMap<Key, SmallVec<[Command; 4]>>>,
+    HashMap<Key, LeaderNode>, // leader tree, field .1
+);
 
 impl KeyMap {
+    /// Walk the leader tree with the given key sequence.
+    /// Returns None if no match, Some(Command) if terminal,
+    /// and the bool indicates whether the prefix is still viable.
+    pub fn leader_lookup(&self, keys: &[Key]) -> LeaderLookup {
+        let mut current = &self.1;
+        for (i, key) in keys.iter().enumerate() {
+            match current.get(key) {
+                None => return LeaderLookup::NoMatch,
+                Some(LeaderNode::Command(cmds)) => {
+                    if i == keys.len() - 1 {
+                        return LeaderLookup::Found(cmds.clone());
+                    } else {
+                        return LeaderLookup::NoMatch; // tried to go deeper into a leaf
+                    }
+                }
+                Some(LeaderNode::Subtree(sub)) => {
+                    if i == keys.len() - 1 {
+                        return LeaderLookup::Prefix; // valid prefix, keep waiting
+                    }
+                    current = sub;
+                }
+            }
+        }
+        LeaderLookup::Prefix
+    }
+
     /// Parses a Yaml tree of modes and their keybindings into a complete keymap.
     ///
     /// e.g.
@@ -24,18 +57,22 @@ impl KeyMap {
     pub fn from(keymap_data: &Hash) -> Result<KeyMap> {
         let mut keymap = HashMap::new();
         let commands = commands::hash_map();
+        let mut leader_tree = HashMap::new();
 
         for (yaml_mode, yaml_key_bindings) in keymap_data {
-            let mode = yaml_mode
-                .as_str()
-                .with_context(|| "A mode key couldn't be parsed as a string".to_string())?;
+            let mode = yaml_mode.as_str().context("Mode key must be a string")?;
+
+            if mode == "leader" {
+                leader_tree = parse_leader_tree(yaml_key_bindings, &commands)?;
+                continue;
+            }
+
             let key_bindings = parse_mode_key_bindings(yaml_key_bindings, &commands)
                 .with_context(|| format!("Failed to parse keymaps for \"{mode}\" mode"))?;
-
             keymap.insert(mode.to_string(), key_bindings);
         }
 
-        Ok(KeyMap(keymap))
+        Ok(KeyMap(keymap, leader_tree))
     }
 
     /// Searches the keymap for the specified key.
@@ -109,6 +146,53 @@ impl KeyMap {
             }
         }
     }
+}
+
+pub enum LeaderLookup {
+    Found(SmallVec<[Command; 4]>),
+    Prefix,  // valid so far, wait for more keys
+    NoMatch, // cancel
+}
+
+fn parse_leader_tree(
+    yaml: &Yaml,
+    commands: &HashMap<&str, Command>,
+) -> Result<HashMap<Key, LeaderNode>> {
+    let hash = yaml.as_hash().context("Leader tree node must be a hash")?;
+
+    let mut map = HashMap::new();
+    for (k, v) in hash {
+        let key = parse_key(k.as_str().context("Leader key must be a string")?)?;
+        let node = match v {
+            // leaf: "gr: git::copy_remote_url"
+            Yaml::String(cmd) => {
+                let f = commands
+                    .get(cmd.as_str())
+                    .with_context(|| format!("Unknown command: {cmd}"))?;
+                let mut sv = SmallVec::new();
+                sv.push(*f);
+                LeaderNode::Command(sv)
+            }
+            // leaf: list of commands
+            Yaml::Array(arr) => {
+                let mut sv = SmallVec::new();
+                for item in arr {
+                    let s = item.as_str().context("Command must be string")?;
+                    sv.push(
+                        *commands
+                            .get(s)
+                            .with_context(|| format!("Unknown command: {s}"))?,
+                    );
+                }
+                LeaderNode::Command(sv)
+            }
+            // subtree: nested hash
+            Yaml::Hash(_) => LeaderNode::Subtree(parse_leader_tree(v, commands)?),
+            other => bail!("Unexpected leader node: {other:?}"),
+        };
+        map.insert(key, node);
+    }
+    Ok(map)
 }
 
 /// Parses the key bindings for a particular mode.
@@ -241,14 +325,13 @@ fn parse_key(data: &str) -> Result<Key> {
 
 impl Deref for KeyMap {
     type Target = HashMap<String, HashMap<Key, SmallVec<[Command; 4]>>>;
-
-    fn deref(&self) -> &HashMap<String, HashMap<Key, SmallVec<[Command; 4]>>> {
+    fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
 impl DerefMut for KeyMap {
-    fn deref_mut(&mut self) -> &mut HashMap<String, HashMap<Key, SmallVec<[Command; 4]>>> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
