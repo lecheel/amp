@@ -52,6 +52,7 @@ pub fn hash_map() -> HashMap<&'static str, Command> {
     map.insert("ex::complete", ex::complete);
     map.insert("ex::apply_completion", ex::apply_completion);
     map.insert("ex::complete", ex::complete);
+    map.insert("rg::switch_to_last_rg", rg::switch_to_last_rg);
     map.insert(
         "application::open_under_cursor",
         application::open_under_cursor,

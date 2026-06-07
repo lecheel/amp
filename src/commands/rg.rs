@@ -1,5 +1,3 @@
-//--+ src/commands/rg.rs
-
 use crate::commands::{self, Result};
 use crate::errors::*;
 use crate::models::application::{Application, BufferMetadata, BufferType};
@@ -7,8 +5,65 @@ use crate::util;
 use scribe::buffer::Position;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use syntect::parsing::{SyntaxDefinition, SyntaxSet};
 
 const RG_BUFFER_PATH: &str = "[Ripgrep Results]";
+
+// Embedded syntax definition for ripgrep grouped output.
+// This scopes file paths as "strings", line/col numbers as "constants",
+// and headers as "keywords" so they pick up standard theme colors automatically.
+const RG_SYNTAX_YAML: &str = r#"
+%YAML 1.2
+---
+name: Ripgrep Results
+scope: text.ripgrep
+contexts:
+  main:
+    - match: '^(\d+)(:)(\d+)(:)'
+      captures:
+        1: constant.numeric.line-number.ripgrep
+        2: punctuation.separator.ripgrep
+        3: constant.numeric.column-number.ripgrep
+        4: punctuation.separator.ripgrep
+    - match: '^(\d+)(:)'
+      captures:
+        1: constant.numeric.line-number.ripgrep
+        2: punctuation.separator.ripgrep
+    - match: '^(Searching for:|No matches found for:)'
+      scope: keyword.other.ripgrep
+    - match: '^\S+$'
+      scope: string.unquoted.file-path.ripgrep
+"#;
+
+/// Ensures the custom syntax is loaded into the workspace SyntaxSet
+/// and returns the SyntaxReference to attach to the buffer.
+fn ensure_rg_syntax(app: &mut Application) -> anyhow::Result<syntect::parsing::SyntaxReference> {
+    // Check if we've already added it
+    if let Some(syn) = app
+        .workspace
+        .syntax_set
+        .find_syntax_by_name("Ripgrep Results")
+        .cloned()
+    {
+        return Ok(syn);
+    }
+
+    let syntax_def = SyntaxDefinition::load_from_str(RG_SYNTAX_YAML, true, None)
+        .context("Failed to parse Ripgrep Results syntax definition")?;
+
+    // Take the existing syntax set, add our new syntax, and put it back
+    let mut builder =
+        std::mem::replace(&mut app.workspace.syntax_set, SyntaxSet::new()).into_builder();
+    builder.add(syntax_def);
+    app.workspace.syntax_set = builder.build();
+
+    // Now find the syntax reference in the updated set
+    app.workspace
+        .syntax_set
+        .find_syntax_by_name("Ripgrep Results")
+        .cloned()
+        .context("Failed to find just-added Ripgrep syntax")
+}
 
 /// Run ripgrep with the given pattern and display results in a virtual buffer.
 pub fn search(app: &mut Application, pattern: &str) -> Result {
@@ -60,15 +115,24 @@ pub fn search(app: &mut Application, pattern: &str) -> Result {
         while app.workspace.current_buffer.as_ref().and_then(|b| b.id) != Some(id) {
             app.workspace.next_buffer();
         }
+
+        let syntax_ref = ensure_rg_syntax(app)?;
         if let Some(buf) = app.workspace.current_buffer.as_mut() {
             buf.replace(results);
             buf.cursor.move_to(Position { line: 0, offset: 0 });
+            // Ensure syntax highlighting is re-applied if it was cleared
+            if buf.syntax_definition.is_none() {
+                buf.syntax_definition = Some(syntax_ref);
+            }
         }
     } else {
         let mut rg_buffer = scribe::Buffer::new();
         rg_buffer.path = Some(PathBuf::from(RG_BUFFER_PATH));
         rg_buffer.insert(results);
         rg_buffer.cursor.move_to(Position { line: 0, offset: 0 });
+
+        // Apply the custom syntax highlighting
+        rg_buffer.syntax_definition = Some(ensure_rg_syntax(app)?);
 
         util::add_buffer(rg_buffer, app)?;
 
@@ -196,6 +260,18 @@ pub fn open_under_cursor(app: &mut Application) -> Result {
     commands::view::scroll_to_cursor(app)?;
 
     Ok(())
+}
+
+/// Switch to the existing [Ripgrep Results] buffer.
+pub fn switch_to_last_rg(app: &mut Application) -> Result {
+    let found_id = find_rg_buffer_id(app);
+
+    if found_id.is_some() {
+        // find_rg_buffer_id already navigated the workspace to the rg buffer.
+        Ok(())
+    } else {
+        bail!("No previous ripgrep results buffer found")
+    }
 }
 
 // ── Helpers ──────────────────────────────────────────────
