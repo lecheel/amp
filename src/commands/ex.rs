@@ -42,8 +42,10 @@ pub fn accept_input(app: &mut Application) -> Result {
     let arg = parts.get(1).copied().unwrap_or("").trim();
 
     match cmd {
-        "q" => commands::application::exit(app)?,
+        "q" => commands::buffer::close(app)?,
+        "q!" => commands::alias::force_exit(app)?,
         "w" => commands::buffer::save(app)?,
+        "wq" => commands::alias::save_and_exit(app)?,
         "bn" => commands::workspace::next_buffer(app)?,
         "bp" => commands::workspace::prev_buffer(app)?,
         "bd" => commands::buffer::close(app)?,
@@ -59,7 +61,14 @@ pub fn accept_input(app: &mut Application) -> Result {
         _ => bail!("Unknown command: {}", cmd),
     }
 
-    commands::application::switch_to_normal_mode(app)
+    // Only switch back to normal mode if we're still in ex mode.
+    // Commands like :q change the mode to Exit, and :w (on a new buffer)
+    // changes the mode to Path. We must not override those.
+    if matches!(app.mode, Mode::Ex(_)) {
+        commands::application::switch_to_normal_mode(app)?;
+    }
+
+    Ok(())
 }
 
 pub fn previous_history(app: &mut Application) -> Result {
