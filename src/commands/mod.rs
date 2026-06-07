@@ -34,6 +34,8 @@ pub fn hash_map() -> HashMap<&'static str, Command> {
     );
 
     // Ex mode commands
+    map.insert("view::page_down", view::page_down);
+    map.insert("view::page_up", view::page_up);
     map.insert("ex::push_char", ex::push_char);
     map.insert("ex::pop_char", ex::pop_char);
     map.insert("ex::accept_input", ex::accept_input);

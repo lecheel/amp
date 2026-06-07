@@ -207,6 +207,22 @@ impl View {
         );
         self.event_listener_killswitch = killswitch_tx;
     }
+
+    /// Returns the first visible line and an estimate of the last visible line.
+    pub fn visible_line_range(&self, buffer: &Buffer) -> Result<(usize, usize)> {
+        let region = self
+            .scrollable_regions
+            .get(&buffer_key(buffer)?)
+            .context("Buffer not properly initialized")?;
+        let start = region.line_offset();
+        // -1 for status line
+        let end = start + self.terminal.height().saturating_sub(1);
+        Ok((start, end))
+    }
+
+    pub fn height(&self) -> usize {
+        self.terminal.height()
+    }
 }
 
 #[cfg(not(test))]
