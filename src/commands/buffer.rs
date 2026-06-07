@@ -16,7 +16,7 @@ pub fn save(app: &mut Application) -> Result {
         .as_ref()
         .context(BUFFER_MISSING)?;
 
-    if !app.buffer_registry.is_editable(buf.id) {
+    if !app.view.buffer_registry.is_editable(buf.id) {
         bail!("This buffer cannot be saved");
     }
     remove_trailing_whitespace(app)?;
@@ -201,7 +201,7 @@ pub fn close(app: &mut Application) -> Result {
         .id;
 
     let (unmodified, empty) = if let Some(buf) = app.workspace.current_buffer.as_ref() {
-        (!app.effective_modified(buf), buf.data().is_empty())
+        (!app.view.effective_modified(buf), buf.data().is_empty())
     } else {
         bail!(BUFFER_MISSING);
     };
@@ -215,7 +215,7 @@ pub fn close(app: &mut Application) -> Result {
                 .context(BUFFER_MISSING)?,
         )?;
         app.workspace.close_current_buffer();
-        app.buffer_registry.unregister(id);
+        app.view.buffer_registry.unregister(id);
 
         // After closing, check if only virtual/special buffers remain
         close_orphaned_special_buffers(app)?;
@@ -285,7 +285,7 @@ fn close_orphaned_special_buffers(app: &mut Application) -> Result {
                 let _ = app.view.forget_buffer(buf);
             }
             app.workspace.close_current_buffer();
-            app.buffer_registry.unregister(Some(special_id));
+            app.view.buffer_registry.unregister(Some(special_id));
         }
     }
 
@@ -310,13 +310,13 @@ pub fn close_others(app: &mut Application) -> Result {
         if let Some(buf) = app.workspace.current_buffer.as_ref() {
             if buf.id == id {
                 break;
-            } else if app.effective_modified(buf) && !buf.data().is_empty() {
+            } else if app.view.effective_modified(buf) && !buf.data().is_empty() {
                 modified_buffer = true;
             } else {
                 let close_id = buf.id;
                 app.view.forget_buffer(buf)?;
                 app.workspace.close_current_buffer();
-                app.buffer_registry.unregister(close_id);
+                app.view.buffer_registry.unregister(close_id);
                 continue; // Don't advance — close_current_buffer already moves to next
             }
         }
@@ -387,7 +387,7 @@ pub fn insert_char(app: &mut Application) -> Result {
         .context(BUFFER_MISSING)?;
 
     // Guard: don't allow user edits on readonly/virtual buffers
-    if !app.buffer_registry.is_editable(buf.id) {
+    if !app.view.buffer_registry.is_editable(buf.id) {
         bail!("This buffer is not editable");
     }
     if let Some(buffer) = app.workspace.current_buffer.as_mut() {

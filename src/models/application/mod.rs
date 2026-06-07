@@ -43,7 +43,6 @@ pub struct Application {
     pub error: Option<Error>,
     pub preferences: Rc<RefCell<Preferences>>,
     pub event_channel: Sender<Event>,
-    pub buffer_registry: BufferRegistry,
     events: Receiver<Event>,
     current_mode: ModeKey,
     previous_mode: ModeKey,
@@ -73,24 +72,12 @@ impl Application {
             error: None,
             preferences,
             event_channel,
-            buffer_registry: BufferRegistry::default(),
             events,
         };
 
         app.create_modes()?;
 
         Ok(app)
-    }
-
-    /// Returns true if the buffer should show as modified to the user.
-    /// Virtual and readonly buffers never appear modified regardless of
-    /// the underlying scribe state.
-    pub fn effective_modified(&self, buf: &Buffer) -> bool {
-        if self.buffer_registry.is_virtual(buf.id) || self.buffer_registry.is_readonly(buf.id) {
-            false
-        } else {
-            buf.modified()
-        }
     }
 
     pub fn run(&mut self) -> Result<()> {

@@ -67,7 +67,7 @@ pub fn open_under_cursor(app: &mut Application) -> Result {
                     let _ = app.view.forget_buffer(buf);
                 }
                 app.workspace.close_current_buffer();
-                app.buffer_registry.unregister(Some(list_id));
+                app.view.buffer_registry.unregister(Some(list_id));
                 found = true;
                 break;
             }

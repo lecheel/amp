@@ -88,7 +88,7 @@ pub fn switch_to_buffer_list_mode(app: &mut Application) -> Result {
                     .as_ref()
                     .map(|p| p.to_string_lossy().into_owned())
                     .unwrap_or_else(|| "[No Name]".to_string());
-                let modified = if app.effective_modified(buf) {
+                let modified = if app.view.effective_modified(buf) {
                     " [+]"
                 } else {
                     ""
@@ -128,7 +128,7 @@ pub fn switch_to_buffer_list_mode(app: &mut Application) -> Result {
 
         // Register as virtual AFTER add_buffer (which may reassign id)
         if let Some(buf) = app.workspace.current_buffer.as_ref() {
-            app.buffer_registry.register(
+            app.view.buffer_registry.register(
                 buf.id,
                 BufferMetadata {
                     buffer_type: BufferType::Virtual,

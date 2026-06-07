@@ -21,7 +21,7 @@ use self::event_listener::EventListener;
 use self::theme_loader::ThemeLoader;
 use crate::errors::*;
 use crate::input::Key;
-use crate::models::application::{Event, GitGutterStatus, Preferences};
+use crate::models::application::{BufferRegistry, Event, GitGutterStatus, Preferences};
 use log::debug;
 use scribe::buffer::Buffer;
 use std::cell::RefCell;
@@ -47,6 +47,7 @@ pub struct View {
     event_channel: Sender<Event>,
     event_listener_killswitch: SyncSender<()>,
     pub gutter_statuses: Option<Vec<GitGutterStatus>>,
+    pub buffer_registry: BufferRegistry,
 }
 
 impl View {
@@ -71,7 +72,16 @@ impl View {
             event_channel,
             event_listener_killswitch: killswitch_tx,
             gutter_statuses: None,
+            buffer_registry: BufferRegistry::default(),
         })
+    }
+
+    pub fn effective_modified(&self, buf: &Buffer) -> bool {
+        if self.buffer_registry.is_virtual(buf.id) || self.buffer_registry.is_readonly(buf.id) {
+            false
+        } else {
+            buf.modified()
+        }
     }
 
     pub fn build_presenter(&mut self) -> Result<Presenter<'_>> {
