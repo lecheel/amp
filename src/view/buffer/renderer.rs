@@ -526,6 +526,7 @@ mod tests {
             &Rc::new(RefCell::new(HashMap::new())),
             &workspace.syntax_set,
             &mut terminal_buffer,
+            None,
         )
         .render(lines, None)
         .unwrap();
@@ -564,6 +565,7 @@ mod tests {
             &Rc::new(RefCell::new(HashMap::new())),
             &workspace.syntax_set,
             &mut terminal_buffer,
+            None,
         )
         .render(lines, None)
         .unwrap();
@@ -609,6 +611,7 @@ mod tests {
             &Rc::new(RefCell::new(HashMap::new())),
             &workspace.syntax_set,
             &mut terminal_buffer,
+            None,
         )
         .render(lines, None)
         .unwrap();
@@ -647,6 +650,7 @@ mod tests {
             &Rc::new(RefCell::new(HashMap::new())),
             &workspace.syntax_set,
             &mut terminal_buffer,
+            None,
         )
         .render(lines, None)
         .unwrap();
@@ -692,6 +696,7 @@ mod tests {
             &Rc::new(RefCell::new(HashMap::new())),
             &workspace.syntax_set,
             &mut terminal_buffer,
+            None,
         )
         .render(lines, Some(&mut TestMapper {}))
         .unwrap();
@@ -729,6 +734,7 @@ mod tests {
             &Rc::new(RefCell::new(HashMap::new())),
             &workspace.syntax_set,
             &mut terminal_buffer,
+            None,
         )
         .render(lines, None)
         .unwrap();
@@ -766,6 +772,7 @@ mod tests {
             &render_cache,
             &workspace.syntax_set,
             &mut terminal_buffer,
+            None,
         )
         .render(lines, None)
         .unwrap();
@@ -804,6 +811,7 @@ mod tests {
             &render_cache,
             &workspace.syntax_set,
             &mut terminal_buffer,
+            None,
         )
         .render(lines, None)
         .unwrap();
@@ -829,6 +837,7 @@ mod tests {
             &render_cache,
             &workspace.syntax_set,
             &mut terminal_buffer,
+            None,
         )
         .render(lines2, None)
         .unwrap();
@@ -870,6 +879,7 @@ mod tests {
             &render_cache,
             &workspace.syntax_set,
             &mut terminal_buffer,
+            None,
         )
         .render(lines, None)
         .unwrap();
@@ -894,6 +904,7 @@ mod tests {
             &render_cache,
             &workspace.syntax_set,
             &mut terminal_buffer,
+            None,
         )
         .render(lines2, None)
         .unwrap();
@@ -940,6 +951,7 @@ mod tests {
             &render_cache,
             &workspace.syntax_set,
             &mut terminal_buffer,
+            None,
         )
         .render(lines, None)
         .unwrap();
@@ -984,6 +996,7 @@ mod tests {
             &render_cache,
             &workspace.syntax_set,
             &mut terminal_buffer,
+            None,
         )
         .render(lines, None)
         .unwrap();
@@ -1023,6 +1036,7 @@ mod tests {
             &render_cache,
             &workspace.syntax_set,
             &mut terminal_buffer,
+            None,
         )
         .render(lines, None)
         .unwrap();
@@ -1063,6 +1077,7 @@ mod tests {
             &render_cache,
             &workspace.syntax_set,
             &mut terminal_buffer,
+            None,
         )
         .render(lines, None)
         .unwrap();
@@ -1106,6 +1121,7 @@ mod tests {
             &render_cache,
             &workspace.syntax_set,
             &mut terminal_buffer,
+            None,
         )
         .render(lines, None)
         .unwrap();

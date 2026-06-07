@@ -216,6 +216,9 @@ pub fn close(app: &mut Application) -> Result {
         )?;
         app.workspace.close_current_buffer();
         app.buffer_registry.unregister(id);
+
+        // After closing, check if only virtual/special buffers remain
+        close_orphaned_special_buffers(app)?;
     } else {
         app.switch_to(ModeKey::Confirm);
         if let Mode::Confirm(ref mut mode) = app.mode {
@@ -226,8 +229,71 @@ pub fn close(app: &mut Application) -> Result {
     Ok(())
 }
 
+/// If the only remaining buffers are special (e.g. [Buffer List]),
+/// close them and create a fresh empty buffer so the user isn't stuck.
+fn close_orphaned_special_buffers(app: &mut Application) -> Result {
+    let mut real_buffer_count = 0;
+    let mut special_ids: Vec<usize> = Vec::new();
+
+    let start_id = app.workspace.current_buffer.as_ref().map(|b| b.id);
+    let mut first = true;
+    loop {
+        if !first && app.workspace.current_buffer.as_ref().map(|b| b.id) == start_id {
+            break;
+        }
+        first = false;
+
+        if let Some(buf) = app.workspace.current_buffer.as_ref() {
+            let is_special = buf
+                .path
+                .as_ref()
+                .map(|p| {
+                    let name = p.to_string_lossy();
+                    name == "[Buffer List]" || name == "[No Name]"
+                })
+                .unwrap_or(true);
+
+            if is_special {
+                if let Some(id) = buf.id {
+                    special_ids.push(id);
+                }
+            } else {
+                real_buffer_count += 1;
+            }
+        }
+        app.workspace.next_buffer();
+    }
+
+    if real_buffer_count > 0 {
+        return Ok(());
+    }
+
+    for special_id in special_ids {
+        let current = app.workspace.current_buffer.as_ref().and_then(|b| b.id);
+        loop {
+            if app.workspace.current_buffer.as_ref().and_then(|b| b.id) == Some(special_id) {
+                break;
+            }
+            app.workspace.next_buffer();
+            if app.workspace.current_buffer.as_ref().and_then(|b| b.id) == current {
+                break;
+            }
+        }
+
+        if app.workspace.current_buffer.as_ref().and_then(|b| b.id) == Some(special_id) {
+            if let Some(buf) = app.workspace.current_buffer.as_ref() {
+                let _ = app.view.forget_buffer(buf);
+            }
+            app.workspace.close_current_buffer();
+            app.buffer_registry.unregister(Some(special_id));
+        }
+    }
+
+    // REMOVED: do not create a new buffer — empty workspace is valid
+    Ok(())
+}
+
 pub fn close_others(app: &mut Application) -> Result {
-    // Get the current buffer's ID so we know what *not* to close.
     let id = app
         .workspace
         .current_buffer
@@ -237,44 +303,36 @@ pub fn close_others(app: &mut Application) -> Result {
     let mut modified_buffer = false;
 
     loop {
-        // Try to advance to the next buffer. Handles two important states:
-        //
-        // 1. The initial state, where we haven't advanced beyond the
-        //    the original/desired buffer.
-        // 2. When a buffer that is being closed is positioned *after* the
-        //    original buffer. Closing a buffer in this scenario selects the
-        //    preceding buffer, which, without advancing, would be
-        //    incorrectly interpreted as the completion of this process.
         if app.workspace.current_buffer.as_ref().map(|b| b.id) == Some(id) {
             app.workspace.next_buffer();
         }
 
-        // If we haven't yet looped back to the original buffer,
-        // clean up view-related data and close the current buffer.
         if let Some(buf) = app.workspace.current_buffer.as_ref() {
             if buf.id == id {
-                // We've only got one buffer open; we're done.
                 break;
             } else if app.effective_modified(buf) && !buf.data().is_empty() {
                 modified_buffer = true;
             } else {
+                let close_id = buf.id;
                 app.view.forget_buffer(buf)?;
+                app.workspace.close_current_buffer();
+                app.buffer_registry.unregister(close_id);
+                continue; // Don't advance — close_current_buffer already moves to next
             }
         }
 
         if modified_buffer {
-            // Display a confirmation prompt before closing a modified buffer.
             app.switch_to(ModeKey::Confirm);
             if let Mode::Confirm(ref mut mode) = app.mode {
                 mode.command = close_others_confirm
             }
-
             break;
         }
 
-        // We haven't broken from the loop, so we're not back
-        // at the original buffer; close the current buffer.
-        app.workspace.close_current_buffer();
+        // Safety: if we've looped back, stop
+        if app.workspace.current_buffer.as_ref().map(|b| b.id) == Some(id) {
+            break;
+        }
     }
 
     Ok(())

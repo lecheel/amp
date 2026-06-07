@@ -43,9 +43,7 @@ pub fn accept_input(app: &mut Application) -> Result {
 
     match cmd {
         "q" => commands::application::exit(app)?,
-        "q!" => commands::alias::force_exit(app)?,
         "w" => commands::buffer::save(app)?,
-        "wq" => commands::alias::save_and_exit(app)?,
         "bn" => commands::workspace::next_buffer(app)?,
         "bp" => commands::workspace::prev_buffer(app)?,
         "bd" => commands::buffer::close(app)?,

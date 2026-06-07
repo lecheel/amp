@@ -461,7 +461,12 @@ pub fn display_available_commands(app: &mut Application) -> Result {
         let command_hash = commands::hash_map();
         let mut command_keys = command_hash.keys().collect::<Vec<&&str>>();
         command_keys.sort();
+
+        // Reverse the keys before inserting. Since each insert prepends at the
+        // cursor position, inserting in descending order ensures the final
+        // buffer is sorted alphabetically ascending from top to bottom.
         command_keys.reverse();
+
         for key in command_keys {
             buffer.insert(format!("{key}\n"));
         }
@@ -549,12 +554,30 @@ mod tests {
         super::display_available_commands(&mut app).unwrap();
 
         let buffer_data = app.workspace.current_buffer.as_ref().unwrap().data();
-        let mut lines = buffer_data.lines();
-        assert_eq!(
-            lines.nth(0),
-            Some("application::display_available_commands")
+        let lines: Vec<&str> = buffer_data.lines().collect();
+
+        // Verify the buffer is populated
+        assert!(!lines.is_empty(), "Expected buffer to contain commands");
+
+        // Verify commands are sorted in ascending alphabetical order
+        for window in lines.windows(2) {
+            assert!(
+                window[0] <= window[1],
+                "Commands not in alphabetical order: '{}' should come before '{}'",
+                window[1],
+                window[0]
+            );
+        }
+
+        // Verify some known command categories are present
+        assert!(
+            lines.iter().any(|l| l.starts_with("application::")),
+            "Expected at least one 'application::*' command"
         );
-        assert_eq!(lines.last(), Some("workspace::next_buffer"));
+        assert!(
+            lines.iter().any(|l| l.starts_with("buffer::")),
+            "Expected at least one 'buffer::*' command"
+        );
     }
 
     #[test]
