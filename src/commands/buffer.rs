@@ -1226,16 +1226,23 @@ pub fn format(app: &mut Application) -> Result {
             parts.push(stderr);
         }
         let error = if parts.is_empty() {
-            format!("exited with code {}", output.status)
+            format!("{}", output.status)
         } else {
             parts.join("\n")
         };
 
-        bail!(
-            "Format tool failed with code {}\n{}",
-            output.status,
-            error.trim()
-        );
+        // Skip the first 2 lines of the error message as previously requested
+        let trimmed_error = error.lines().skip(2).collect::<Vec<&str>>().join("\n");
+
+        let final_error = trimmed_error.trim();
+
+        if final_error.is_empty() {
+            // Fall back directly to the exit status if there is no remaining error text
+            bail!("{}", output.status);
+        } else {
+            // Return only the remaining output from the tool
+            bail!("{}", final_error);
+        }
     }
 }
 
