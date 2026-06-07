@@ -46,6 +46,7 @@ pub fn hash_map() -> HashMap<&'static str, Command> {
     map.insert("ex::navigate_down", ex::navigate_down);
     map.insert("ex::navigate_left", ex::navigate_left);
     map.insert("ex::navigate_right", ex::navigate_right);
+    map.insert("git::revert_hunk", git::revert_hunk);
     map.insert("ex::select_next_completion", ex::select_next_completion);
     map.insert(
         "ex::select_previous_completion",
