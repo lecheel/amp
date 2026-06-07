@@ -98,6 +98,10 @@ impl Iterator for InputParser {
         }
 
         let (key, consumed) = match slice {
+            [0x1B, b'O', b'P', ..] => (Key::F1, 3),
+            [0x1B, b'O', b'Q', ..] => (Key::F2, 3),
+            [0x1B, b'O', b'R', ..] => (Key::F3, 3),
+            [0x1B, b'O', b'S', ..] => (Key::F4, 3),
             [0x1B, b'[', b'A', ..] => (Key::Up, 3),
             [0x1B, b'[', b'B', ..] => (Key::Down, 3),
             [0x1B, b'[', b'C', ..] => (Key::Right, 3),
@@ -108,6 +112,7 @@ impl Iterator for InputParser {
             [0x1B, b'[', b'3', b'~', ..] => (Key::Delete, 4),
             [0x1B, b'[', b'5', b'~', ..] => (Key::PageUp, 4),
             [0x1B, b'[', b'6', b'~', ..] => (Key::PageDown, 4),
+
             // F1-F12
             [0x1B, b'[', b'1', b'1', b'~', ..] => (Key::F1, 5),
             [0x1B, b'[', b'1', b'2', b'~', ..] => (Key::F2, 5),

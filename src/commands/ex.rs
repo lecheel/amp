@@ -134,6 +134,8 @@ pub fn accept_input(app: &mut Application) -> Result {
         "bd" => commands::buffer::close(app)?,
         "ls" => commands::application::switch_to_buffer_list_mode(app)?,
         "rg" => commands::rg::search(app, arg)?,
+        "cn" => commands::rg::next_result(app)?,
+        "cp" => commands::rg::prev_result(app)?,
         "last_rg" => commands::rg::switch_to_last_rg(app)?,
         "e" => {
             if arg.is_empty() {

@@ -214,10 +214,9 @@ pub fn open_under_cursor(app: &mut Application) -> Result {
                 || prev_line.starts_with("Searching for:")
                 || prev_line.starts_with("No matches")
             {
-                break; // Reached the boundary of the current group
+                break;
             }
 
-            // If the line doesn't start with a digit, it's the file path heading
             let starts_with_digit = prev_line
                 .trim_start()
                 .chars()
@@ -233,7 +232,6 @@ pub fn open_under_cursor(app: &mut Application) -> Result {
 
     let file_path_str = file_path.context("Could not find file path for this result")?;
 
-    // Make path absolute relative to workspace
     let absolute_path = if Path::new(&file_path_str).is_absolute() {
         PathBuf::from(file_path_str)
     } else {
@@ -249,15 +247,16 @@ pub fn open_under_cursor(app: &mut Application) -> Result {
 
     // Move to the correct line (and column if available)
     if let Some(buf) = app.workspace.current_buffer.as_mut() {
-        let target_line = line_num.saturating_sub(1); // rg is 1-indexed
-        let target_col = col_num.unwrap_or(1).saturating_sub(1); // col is 1-indexed, fallback to 1
+        let target_line = line_num.saturating_sub(1);
+        let target_col = col_num.unwrap_or(1).saturating_sub(1);
         buf.cursor.move_to(Position {
             line: target_line,
             offset: target_col,
         });
     }
 
-    commands::view::scroll_to_cursor(app)?;
+    // CHANGED: Center the screen on the result instead of just scrolling to it
+    commands::view::scroll_cursor_to_center(app)?;
 
     Ok(())
 }
@@ -339,4 +338,99 @@ fn extract_word_at(line: &str, offset: usize) -> Option<String> {
 
 fn is_word_char(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
+}
+
+/// Jump to the next ripgrep result and open the file.
+pub fn next_result(app: &mut Application) -> Result {
+    navigate_result(app, Direction::Forward)
+}
+
+/// Jump to the previous ripgrep result and open the file.
+pub fn prev_result(app: &mut Application) -> Result {
+    navigate_result(app, Direction::Backward)
+}
+
+enum Direction {
+    Forward,
+    Backward,
+}
+
+fn navigate_result(app: &mut Application, direction: Direction) -> Result {
+    // Find the RG buffer. This leaves the workspace pointing at it if found.
+    let rg_id = find_rg_buffer_id(app).context("No ripgrep results buffer found")?;
+
+    // Ensure we are currently on the RG buffer
+    while app.workspace.current_buffer.as_ref().and_then(|b| b.id) != Some(rg_id) {
+        app.workspace.next_buffer();
+    }
+
+    let buffer = app
+        .workspace
+        .current_buffer
+        .as_mut()
+        .context(BUFFER_MISSING)?;
+    let data = buffer.data();
+    let total_lines = data.lines().count();
+
+    if total_lines == 0 {
+        bail!("Ripgrep buffer is empty");
+    }
+
+    let mut current_line = buffer.cursor.line;
+    let offset = buffer.cursor.offset;
+
+    // Scan for the next valid result line
+    for _ in 0..total_lines {
+        current_line = match direction {
+            Direction::Forward => {
+                if current_line + 1 >= total_lines {
+                    0
+                } else {
+                    current_line + 1
+                }
+            }
+            Direction::Backward => {
+                if current_line == 0 {
+                    total_lines - 1
+                } else {
+                    current_line - 1
+                }
+            }
+        };
+
+        if let Some(line_text) = data.lines().nth(current_line) {
+            if is_result_line(line_text) {
+                // Move the cursor to the valid result line
+                buffer.cursor.move_to(Position {
+                    line: current_line,
+                    offset,
+                });
+                break;
+            }
+        }
+    }
+
+    // Now that the cursor is on a valid result, open it
+    open_under_cursor(app)
+}
+
+/// Checks if a line is an actual search result (e.g., "10:5:match")
+/// and not a file heading, empty line, or header text.
+fn is_result_line(line: &str) -> bool {
+    let trimmed = line.trim_start();
+
+    // Check if it starts with a digit
+    let mut chars = trimmed.chars().peekable();
+    if !chars.peek().map_or(false, |c| c.is_ascii_digit()) {
+        return false;
+    }
+
+    // Consume all leading digits
+    while chars.peek().map_or(false, |c| c.is_ascii_digit()) {
+        chars.next();
+    }
+
+    // The next character MUST be a colon to be a line number.
+    // This distinguishes "10:5:match" from "123filename.rs" (file paths)
+    chars.peek() == Some(&':')
 }
