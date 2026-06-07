@@ -91,8 +91,10 @@ ex:
   _: ex::push_char
   enter: ex::accept_input
   backspace: ex::pop_char
-  up: ex::previous_history
-  down: ex::next_history
+  up: ex::navigate_up
+  down: ex::navigate_down   
+  left: ex::navigate_left
+  right: ex::navigate_right    
   tab: ex::complete
   escape: application::switch_to_normal_mode
   ctrl-c: application::exit

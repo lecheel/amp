@@ -22,6 +22,51 @@ pub fn pop_char(app: &mut Application) -> Result {
     Ok(())
 }
 
+// ── Smart navigation: popup when visible, history when not ──
+
+pub fn navigate_up(app: &mut Application) -> Result {
+    if let Mode::Ex(ref mut mode) = app.mode {
+        if !mode.completions.is_empty() {
+            mode.select_completion_up();
+        } else {
+            mode.history_previous();
+        }
+    }
+    Ok(())
+}
+
+pub fn navigate_down(app: &mut Application) -> Result {
+    if let Mode::Ex(ref mut mode) = app.mode {
+        if !mode.completions.is_empty() {
+            mode.select_completion_down();
+        } else {
+            mode.history_next();
+        }
+    }
+    Ok(())
+}
+
+pub fn navigate_left(app: &mut Application) -> Result {
+    if let Mode::Ex(ref mut mode) = app.mode {
+        if !mode.completions.is_empty() {
+            mode.select_completion_left();
+        }
+        // No history fallback for left/right
+    }
+    Ok(())
+}
+
+pub fn navigate_right(app: &mut Application) -> Result {
+    if let Mode::Ex(ref mut mode) = app.mode {
+        if !mode.completions.is_empty() {
+            mode.select_completion_right();
+        }
+    }
+    Ok(())
+}
+
+// ── Direct completion navigation (always navigates popup) ──
+
 pub fn select_next_completion(app: &mut Application) -> Result {
     if let Mode::Ex(ref mut mode) = app.mode {
         mode.select_next_completion();
@@ -100,41 +145,29 @@ pub fn accept_input(app: &mut Application) -> Result {
     Ok(())
 }
 
+// ── Direct history navigation (always navigates history) ──
+
 pub fn previous_history(app: &mut Application) -> Result {
     if let Mode::Ex(ref mut mode) = app.mode {
-        if mode.history_index > 0 {
-            mode.history_index -= 1;
-            if let Some(entry) = mode.history.get(mode.history_index) {
-                mode.input = entry.clone();
-            }
-        }
+        mode.history_previous();
     }
     Ok(())
 }
 
 pub fn next_history(app: &mut Application) -> Result {
     if let Mode::Ex(ref mut mode) = app.mode {
-        if mode.history_index < mode.history.len() {
-            mode.history_index += 1;
-            if let Some(entry) = mode.history.get(mode.history_index) {
-                mode.input = entry.clone();
-            } else {
-                mode.input.clear();
-            }
-        }
+        mode.history_next();
     }
     Ok(())
 }
 
 pub fn complete(app: &mut Application) -> Result {
-    // Tab: if popup is visible, cycle; otherwise generate and apply single match
     if let Mode::Ex(ref mut mode) = app.mode {
         if mode.completions.len() == 1 {
             mode.apply_selection();
         } else if !mode.completions.is_empty() {
             mode.select_next_completion();
         } else {
-            // No completions yet, generate them
             mode.update_completions(&app.workspace.path);
             if mode.completions.len() == 1 {
                 mode.apply_selection();

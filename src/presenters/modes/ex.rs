@@ -1,5 +1,6 @@
 use crate::errors::*;
 use crate::models::application::modes::ExMode;
+use crate::view::RGBColor;
 use crate::view::{Colors, CursorType, StatusLineData, Style, View};
 use scribe::buffer::Position;
 use scribe::Workspace;
@@ -7,6 +8,14 @@ use unicode_segmentation::UnicodeSegmentation;
 
 const COMPLETION_COLUMNS: usize = 4;
 const MODE_LABEL: &str = " CMD ";
+
+// Popup color scheme
+const POPUP_BG: RGBColor = RGBColor(0x2C, 0x2C, 0x2C); // dark gray
+const POPUP_CMD_FG: RGBColor = RGBColor(0xA9, 0xDC, 0x76); // green
+const POPUP_DIR_FG: RGBColor = RGBColor(0x61, 0xAF, 0xEF); // blue
+const POPUP_FILE_FG: RGBColor = RGBColor(0xAB, 0xB2, 0xBF); // silver
+const POPUP_SEL_FG: RGBColor = RGBColor(0xFF, 0xFF, 0xFF); // white
+const POPUP_SEL_BG: RGBColor = RGBColor(0x4C, 0x78, 0xCC); // blue highlight
 
 pub fn display(
     workspace: &mut Workspace,
@@ -37,12 +46,22 @@ pub fn display(
     if !completions.is_empty() {
         let col_width = terminal_width / COMPLETION_COLUMNS;
         let row_count = (completions.len() + COMPLETION_COLUMNS - 1) / COMPLETION_COLUMNS;
-
         let max_rows = status_line_y.saturating_sub(1);
         let visible_rows = row_count.min(max_rows);
         let popup_start_y = status_line_y.saturating_sub(visible_rows);
 
         for row in 0..visible_rows {
+            // Paint the full row with popup bg first — no leaks from buffer content.
+            presenter.print(
+                &Position {
+                    line: popup_start_y + row,
+                    offset: 0,
+                },
+                Style::Default,
+                Colors::Custom(POPUP_BG, POPUP_BG),
+                " ".repeat(terminal_width),
+            );
+
             for col in 0..COMPLETION_COLUMNS {
                 let idx = row * COMPLETION_COLUMNS + col;
                 if idx >= completions.len() {
@@ -53,35 +72,28 @@ pub fn display(
                 let x = col * col_width;
                 let y = popup_start_y + row;
 
-                // Use the display field for rendering
-                let text =
-                    truncate_graphemes(&completions[idx].display, col_width.saturating_sub(1));
-
-                let colors = if is_selected {
-                    Colors::Inverted
-                } else if completions[idx].display.ends_with('/') {
-                    // Directories get a different color
-                    Colors::CustomForeground(crate::view::RGBColor(0x61, 0xAF, 0xEF))
-                // blue
-                } else if completions[idx].display.starts_with(':') {
-                    // Commands get green
-                    Colors::CustomForeground(crate::view::RGBColor(0xA9, 0xDC, 0x76))
-                // green
+                let (fg, bg) = if is_selected {
+                    (POPUP_SEL_FG, POPUP_SEL_BG)
                 } else {
-                    // Files get white/default
-                    Colors::CustomForeground(crate::view::RGBColor(0xAB, 0xB2, 0xBF))
-                    // silver
+                    let fg = if completions[idx].display.ends_with('/') {
+                        POPUP_DIR_FG
+                    } else if completions[idx].display.starts_with(':') {
+                        POPUP_CMD_FG
+                    } else {
+                        POPUP_FILE_FG
+                    };
+                    (fg, POPUP_BG)
                 };
 
-                // Clear the cell area first
-                presenter.print(
-                    &Position { line: y, offset: x },
-                    Style::Default,
-                    Colors::Default,
-                    " ".repeat(col_width),
-                );
+                // Build a single fixed-width cell string: " {label}{padding}"
+                // This is one print call → one bg fill, no phase interaction.
+                let inner_width = col_width.saturating_sub(1); // 1-char left margin
+                let label =
+                    truncate_graphemes(&completions[idx].display, inner_width.saturating_sub(1));
+                let label_len = label.graphemes(true).count();
+                let pad = inner_width.saturating_sub(label_len);
+                let cell = format!(" {}{}", label, " ".repeat(pad));
 
-                // Print the completion text
                 presenter.print(
                     &Position { line: y, offset: x },
                     if is_selected {
@@ -89,8 +101,8 @@ pub fn display(
                     } else {
                         Style::Default
                     },
-                    colors,
-                    text,
+                    Colors::Custom(fg, bg),
+                    cell,
                 );
             }
         }
@@ -132,8 +144,6 @@ pub fn display(
     Ok(())
 }
 
-/// Truncates a string to at most `max_graphemes` grapheme clusters,
-/// appending "~" if truncated.
 fn truncate_graphemes(s: &str, max_graphemes: usize) -> String {
     let graphemes: Vec<&str> = s.graphemes(true).collect();
     if graphemes.len() <= max_graphemes {

@@ -1,5 +1,7 @@
 use std::path::Path;
 
+const COMPLETION_COLUMNS: usize = 4;
+
 #[derive(Clone, Debug)]
 pub struct CompletionEntry {
     pub display: String,
@@ -43,7 +45,6 @@ impl ExMode {
         let mut results = Vec::new();
 
         if input.starts_with("e ") {
-            // File path completion — show only the filename
             let prefix = input.splitn(2, ' ').nth(1).unwrap_or("");
             if let Ok(entries) = std::fs::read_dir(workspace_path) {
                 let mut names: Vec<String> = entries
@@ -66,7 +67,6 @@ impl ExMode {
                 }
             }
         } else {
-            // Command completion — display and value are the same
             let commands = [
                 (":q", ":q"),
                 (":q!", ":q!"),
@@ -96,6 +96,57 @@ impl ExMode {
         results
     }
 
+    // ── Grid navigation ──────────────────────────────────
+
+    pub fn select_completion_down(&mut self) {
+        if self.completions.is_empty() {
+            return;
+        }
+        let current = self.completion_selection.unwrap_or(0);
+        let below = current + COMPLETION_COLUMNS;
+        if below < self.completions.len() {
+            self.completion_selection = Some(below);
+        }
+        // If at bottom row, do nothing (clamp)
+    }
+
+    pub fn select_completion_up(&mut self) {
+        if self.completions.is_empty() {
+            return;
+        }
+        let current = self.completion_selection.unwrap_or(0);
+        if current >= COMPLETION_COLUMNS {
+            self.completion_selection = Some(current - COMPLETION_COLUMNS);
+        }
+        // If at top row, do nothing (clamp)
+    }
+
+    pub fn select_completion_right(&mut self) {
+        if self.completions.is_empty() {
+            return;
+        }
+        let current = self.completion_selection.unwrap_or(0);
+        let current_row = current / COMPLETION_COLUMNS;
+        let next_in_row = current + 1;
+        // Stay in same row and don't go past end
+        if next_in_row / COMPLETION_COLUMNS == current_row && next_in_row < self.completions.len() {
+            self.completion_selection = Some(next_in_row);
+        }
+    }
+
+    pub fn select_completion_left(&mut self) {
+        if self.completions.is_empty() {
+            return;
+        }
+        let current = self.completion_selection.unwrap_or(0);
+        if current % COMPLETION_COLUMNS > 0 {
+            self.completion_selection = Some(current - 1);
+        }
+        // If at leftmost column, do nothing (clamp)
+    }
+
+    // ── Sequential navigation (Tab / Ctrl-N / Ctrl-P) ────
+
     pub fn select_next_completion(&mut self) {
         if self.completions.is_empty() {
             return;
@@ -105,7 +156,7 @@ impl ExMode {
                 if idx + 1 < self.completions.len() {
                     Some(idx + 1)
                 } else {
-                    Some(0)
+                    Some(0) // wrap
                 }
             }
             None => Some(0),
@@ -121,12 +172,36 @@ impl ExMode {
                 if idx > 0 {
                     Some(idx - 1)
                 } else {
-                    Some(self.completions.len() - 1)
+                    Some(self.completions.len() - 1) // wrap
                 }
             }
             None => Some(self.completions.len() - 1),
         };
     }
+
+    // ── History navigation ────────────────────────────────
+
+    pub fn history_previous(&mut self) {
+        if self.history_index > 0 {
+            self.history_index -= 1;
+            if let Some(entry) = self.history.get(self.history_index) {
+                self.input = entry.clone();
+            }
+        }
+    }
+
+    pub fn history_next(&mut self) {
+        if self.history_index < self.history.len() {
+            self.history_index += 1;
+            if let Some(entry) = self.history.get(self.history_index) {
+                self.input = entry.clone();
+            } else {
+                self.input.clear();
+            }
+        }
+    }
+
+    // ── Apply selection ───────────────────────────────────
 
     pub fn apply_selection(&mut self) {
         if let Some(idx) = self.completion_selection {
