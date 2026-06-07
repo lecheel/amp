@@ -151,22 +151,26 @@ impl TermionTerminal {
         self.present();
     }
 
+    // In deinit(), add bracketed paste disable BEFORE the existing cleanup:
     fn deinit(&self) {
+        // Disable bracketed paste mode
+        if let Ok(mut guard) = self.output.lock() {
+            if let Some(ref mut output) = *guard {
+                let _ = output.write_all(b"\x1b[?2004l");
+                let _ = output.flush();
+            }
+        }
+
         self.restore_cursor();
         self.set_cursor(Some(Position { line: 0, offset: 0 }));
         self.present();
 
-        // Clear the current position so we're forced
-        // to move it on the first print after resuming.
         self.current_position.lock().ok().take();
 
-        // Terminal destructor cleans up for us.
         if let Ok(mut guard) = self.output.lock() {
             guard.take();
         }
 
-        // Flush the terminal before suspending to cause the switch from the
-        // alternate screen to main screen to properly restore the terminal.
         let _ = stdout().flush();
     }
 
@@ -417,11 +421,16 @@ fn create_event_listener() -> Result<(Poll, Signals)> {
     Ok((event_listener, signals))
 }
 
+// In create_output_instance(), add bracketed paste enable:
 fn create_output_instance() -> BufWriter<RawTerminal<AlternateScreen<Stdout>>> {
     let screen = stdout().into_alternate_screen().unwrap();
+    let mut output = BufWriter::with_capacity(1_048_576, screen.into_raw_mode().unwrap());
 
-    // Use a 1MB buffered writer for stdout.
-    BufWriter::with_capacity(1_048_576, screen.into_raw_mode().unwrap())
+    // Enable bracketed paste mode
+    let _ = output.write_all(b"\x1b[?2004h");
+    let _ = output.flush();
+
+    output
 }
 
 fn map_style(style: Style) -> Option<Box<dyn Display>> {

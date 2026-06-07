@@ -97,6 +97,8 @@ ex:
   escape: application::switch_to_normal_mode
   ctrl-c: application::exit
   ctrl-z: application::suspend
+  ctrl-n: ex::select_next_completion
+  ctrl-p: ex::select_previous_completion  
 
 # Operator-pending modes: d/y/c waits for a motion or repeated operator
 

@@ -447,6 +447,30 @@ pub fn display_current_scope(app: &mut Application) -> Result {
     util::add_buffer(scope_display_buffer, app)
 }
 
+pub fn insert_paste(app: &mut Application, text: String) -> Result {
+    {
+        let buf = app
+            .workspace
+            .current_buffer
+            .as_mut()
+            .context(BUFFER_MISSING)?;
+
+        if !app.view.buffer_registry.is_editable(buf.id) {
+            bail!("This buffer is not editable");
+        }
+
+        // Insert as a single undo group so the entire paste
+        // can be undone with one undo operation
+        buf.start_operation_group();
+        buf.insert(text);
+        buf.end_operation_group();
+    }
+
+    commands::view::scroll_to_cursor(app)?;
+
+    Ok(())
+}
+
 /// Inserts a newline character at the current cursor position.
 /// Also performs automatic indentation, basing the indent off
 /// of the previous line's leading whitespace.

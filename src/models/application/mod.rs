@@ -277,12 +277,33 @@ impl Application {
             Event::OpenModeIndexComplete(index) => {
                 if let Mode::Open(ref mut open_mode) = self.mode {
                     open_mode.set_index(index);
-
-                    // Trigger a search, in case a query was
-                    // entered while we were indexing.
                     open_mode.search();
                 }
             }
+            Event::Paste(text) => {
+                self.error = self.handle_paste(text).err();
+            }
+        }
+    }
+
+    fn handle_paste(&mut self, text: String) -> Result<()> {
+        match self.mode {
+            Mode::Insert | Mode::Paste => commands::buffer::insert_paste(self, text),
+            Mode::Ex(_) => {
+                if let Mode::Ex(ref mut mode) = self.mode {
+                    mode.input.push_str(&text);
+                    mode.update_completions(&self.workspace.path);
+                }
+                Ok(())
+            }
+            Mode::Path(_) => {
+                if let Mode::Path(ref mut mode) = self.mode {
+                    mode.input.push_str(&text);
+                }
+                Ok(())
+            }
+            // In other modes, ignore the paste silently
+            _ => Ok(()),
         }
     }
 

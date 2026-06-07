@@ -8,6 +8,7 @@ pub fn push_char(app: &mut Application) -> Result {
     if let crate::input::Key::Char(c) = *key {
         if let Mode::Ex(ref mut mode) = app.mode {
             mode.input.push(c);
+            mode.update_completions(&app.workspace.path);
         }
     }
     Ok(())
@@ -16,11 +17,42 @@ pub fn push_char(app: &mut Application) -> Result {
 pub fn pop_char(app: &mut Application) -> Result {
     if let Mode::Ex(ref mut mode) = app.mode {
         mode.input.pop();
+        mode.update_completions(&app.workspace.path);
     }
     Ok(())
 }
 
+pub fn select_next_completion(app: &mut Application) -> Result {
+    if let Mode::Ex(ref mut mode) = app.mode {
+        mode.select_next_completion();
+    }
+    Ok(())
+}
+
+pub fn select_previous_completion(app: &mut Application) -> Result {
+    if let Mode::Ex(ref mut mode) = app.mode {
+        mode.select_previous_completion();
+    }
+    Ok(())
+}
+
+pub fn apply_completion(app: &mut Application) -> Result {
+    if let Mode::Ex(ref mut mode) = app.mode {
+        mode.apply_selection();
+    }
+    Ok(())
+}
+
+//--+ src/commands/ex.rs
+
 pub fn accept_input(app: &mut Application) -> Result {
+    // If a completion is selected, apply it before executing
+    if let Mode::Ex(ref mut mode) = app.mode {
+        if mode.completion_selection.is_some() {
+            mode.apply_selection();
+        }
+    }
+
     let input = if let Mode::Ex(ref mode) = app.mode {
         mode.input.trim_start_matches(':').trim().to_string()
     } else {
@@ -34,6 +66,8 @@ pub fn accept_input(app: &mut Application) -> Result {
             mode.history_index = mode.history.len();
         }
         mode.input.clear();
+        mode.completions.clear();
+        mode.completion_selection = None;
     }
 
     // Parse and execute
@@ -42,7 +76,7 @@ pub fn accept_input(app: &mut Application) -> Result {
     let arg = parts.get(1).copied().unwrap_or("").trim();
 
     match cmd {
-        "q" => commands::buffer::close(app)?,
+        "q" => commands::application::exit(app)?,
         "q!" => commands::alias::force_exit(app)?,
         "w" => commands::buffer::save(app)?,
         "wq" => commands::alias::save_and_exit(app)?,
@@ -61,9 +95,6 @@ pub fn accept_input(app: &mut Application) -> Result {
         _ => bail!("Unknown command: {}", cmd),
     }
 
-    // Only switch back to normal mode if we're still in ex mode.
-    // Commands like :q change the mode to Exit, and :w (on a new buffer)
-    // changes the mode to Path. We must not override those.
     if matches!(app.mode, Mode::Ex(_)) {
         commands::application::switch_to_normal_mode(app)?;
     }
@@ -98,40 +129,17 @@ pub fn next_history(app: &mut Application) -> Result {
 }
 
 pub fn complete(app: &mut Application) -> Result {
+    // Tab: if popup is visible, cycle; otherwise generate and apply single match
     if let Mode::Ex(ref mut mode) = app.mode {
-        let input = mode.input.trim_start_matches(':').to_string();
-
-        if input.starts_with("e ") {
-            // File path completion
-            let prefix = input.splitn(2, ' ').nth(1).unwrap_or("");
-            let mut matches = Vec::new();
-
-            if let Ok(entries) = std::fs::read_dir(&app.workspace.path) {
-                for entry in entries.flatten() {
-                    if let Some(name) = entry.file_name().to_str() {
-                        if name.starts_with(prefix) {
-                            matches.push(name.to_string());
-                        }
-                    }
-                }
-            }
-
-            if matches.len() == 1 {
-                mode.input = format!(":e {} ", matches[0]);
-            }
+        if mode.completions.len() == 1 {
+            mode.apply_selection();
+        } else if !mode.completions.is_empty() {
+            mode.select_next_completion();
         } else {
-            // Command completion
-            let commands = [":q", ":q!", ":w", ":wq", ":bn", ":bp", ":bd", ":e", ":ls"];
-            let matches: Vec<_> = commands
-                .iter()
-                .filter(|c| c.starts_with(&mode.input))
-                .collect();
-
-            if matches.len() == 1 {
-                mode.input = matches[0].to_string();
-                if !mode.input.ends_with(' ') && !mode.input.ends_with('!') {
-                    mode.input.push(' ');
-                }
+            // No completions yet, generate them
+            mode.update_completions(&app.workspace.path);
+            if mode.completions.len() == 1 {
+                mode.apply_selection();
             }
         }
     }

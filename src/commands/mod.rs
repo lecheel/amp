@@ -38,6 +38,12 @@ pub fn hash_map() -> HashMap<&'static str, Command> {
     map.insert("ex::accept_input", ex::accept_input);
     map.insert("ex::previous_history", ex::previous_history);
     map.insert("ex::next_history", ex::next_history);
+    map.insert("ex::select_next_completion", ex::select_next_completion);
+    map.insert(
+        "ex::select_previous_completion",
+        ex::select_previous_completion,
+    );
+    map.insert("ex::apply_completion", ex::apply_completion);
     map.insert("ex::complete", ex::complete);
 
     map

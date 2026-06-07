@@ -6,4 +6,5 @@ pub enum Event {
     Key(Key),
     Resize,
     OpenModeIndexComplete(Index),
+    Paste(String),
 }
