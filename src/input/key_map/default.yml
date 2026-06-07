@@ -26,9 +26,8 @@ normal:
   o: cursor::insert_with_newline
   O: cursor::insert_with_newline_above
   x: buffer::delete
-  # d, y, c now enter pending modes for dd/yy/cc/dw/cw/yw support
-  d: application::switch_to_pending_delete_mode
-  ";": buffer::delete_current_line
+  d: buffer::delete_token
+  ;: buffer::delete_current_line
   D: buffer::delete_rest_of_line
   C: buffer::change_rest_of_line
   s: buffer::save
@@ -51,8 +50,8 @@ normal:
     - search::move_to_previous_result
   m: view::scroll_down
   M: buffer::merge_next_line
-  y: application::switch_to_pending_yank_mode
-  c: application::switch_to_pending_change_mode
+  y: buffer::copy_current_line
+  c: buffer::change_token
   R: git::copy_remote_url
   z: application::suspend
   Q: application::exit
@@ -67,17 +66,14 @@ normal:
   ",": view::scroll_up
   ">": buffer::indent_line
   "<": buffer::outdent_line
-  # "[": buffer::toggle_line_comment
-  "[": application::switch_to_pending_left_bracket_mode
-  "]": application::switch_to_pending_right_bracket_mode
+  "[": buffer::toggle_line_comment
   "=": git::add
   escape: view::scroll_cursor_to_center
   page_up: view::scroll_up
   page_down: view::scroll_down
   space: application::switch_to_open_mode
   tab: workspace::next_buffer
-  # enter: application::switch_to_symbol_jump_mode
-  enter: buffer_list::open_under_cursor
+  enter: application::switch_to_symbol_jump_mode
   backspace:
     - buffer::backspace
     - application::switch_to_insert_mode
@@ -88,8 +84,7 @@ normal:
   ctrl-c: application::exit
   ctrl-p: application::switch_to_paste_mode
   "?": application::display_quick_start_guide
-  # ":": application::run_file_manager
-  ":": application::switch_to_ex_mode 
+  ":": application::run_file_manager
   G: application::run_git_tool
 
 ex:
@@ -415,7 +410,7 @@ select_line:
     - selection::copy_and_delete
     - application::switch_to_normal_mode
     - view::scroll_to_cursor
-  ";":
+  ;:
     - selection::copy_and_delete
     - application::switch_to_normal_mode
     - view::scroll_to_cursor
