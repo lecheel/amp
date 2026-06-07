@@ -14,6 +14,7 @@ pub mod line_jump;
 pub mod open;
 pub mod path;
 pub mod preferences;
+pub mod rg;
 pub mod search;
 pub mod search_select;
 pub mod selection;
@@ -51,6 +52,10 @@ pub fn hash_map() -> HashMap<&'static str, Command> {
     map.insert("ex::complete", ex::complete);
     map.insert("ex::apply_completion", ex::apply_completion);
     map.insert("ex::complete", ex::complete);
+    map.insert(
+        "application::open_under_cursor",
+        application::open_under_cursor,
+    );
 
     map
 }

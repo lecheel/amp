@@ -133,6 +133,7 @@ pub fn accept_input(app: &mut Application) -> Result {
         "bp" => commands::workspace::prev_buffer(app)?,
         "bd" => commands::buffer::close(app)?,
         "ls" => commands::application::switch_to_buffer_list_mode(app)?,
+        "rg" => commands::rg::search(app, arg)?,
         "e" => {
             if arg.is_empty() {
                 bail!("No file specified for :e");

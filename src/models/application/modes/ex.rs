@@ -80,6 +80,7 @@ impl ExMode {
                 (":bd", ":bd"),
                 (":e ", ":e "),
                 (":ls", ":ls"),
+                (":rg ", ":rg "),
             ];
             for (display, value) in &commands {
                 let matches = self.input.starts_with(':') && display.starts_with(&self.input);

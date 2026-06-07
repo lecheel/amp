@@ -143,6 +143,21 @@ pub fn switch_to_buffer_list_mode(app: &mut Application) -> Result {
     Ok(())
 }
 
+pub fn open_under_cursor(app: &mut Application) -> Result {
+    let buffer_path = app
+        .workspace
+        .current_buffer
+        .as_ref()
+        .and_then(|b| b.path.as_ref())
+        .map(|p| p.to_string_lossy().into_owned());
+
+    match buffer_path.as_deref() {
+        Some("[Buffer List]") => commands::buffer_list::open_under_cursor(app),
+        Some("[Ripgrep Results]") => commands::rg::open_under_cursor(app),
+        _ => commands::application::switch_to_symbol_jump_mode(app),
+    }
+}
+
 pub fn switch_to_ex_mode(app: &mut Application) -> Result {
     app.switch_to(ModeKey::Ex);
     if let Mode::Ex(ref mut mode) = app.mode {
