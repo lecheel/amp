@@ -1121,6 +1121,117 @@ pub fn insert_tab(app: &mut Application) -> Result {
     Ok(())
 }
 
+pub fn fmt_save(app: &mut Application) -> Result {
+    {
+        let buf = app
+            .workspace
+            .current_buffer
+            .as_ref()
+            .context(BUFFER_MISSING)?;
+
+        if !app.view.buffer_registry.is_editable(buf.id) {
+            bail!("This buffer cannot be saved");
+        }
+    }
+
+    let path = {
+        app.workspace
+            .current_buffer
+            .as_ref()
+            .context(BUFFER_MISSING)?
+            .path
+            .clone()
+    };
+
+    if let Some(path) = path {
+        // Clean up and save first to avoid data loss if formatting fails
+        remove_trailing_whitespace(app)?;
+        ensure_trailing_newline(app)?;
+        app.workspace
+            .current_buffer
+            .as_mut()
+            .unwrap()
+            .save()
+            .context(BUFFER_SAVE_FAILED)?;
+
+        // Determine formatter based on file extension
+        let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+
+        let (format_command, tool_name): (Option<std::process::Command>, &str) = match extension {
+            "rs" => {
+                let mut cmd = std::process::Command::new("rustfmt");
+                cmd.arg("--edition").arg("2021");
+                (Some(cmd), "rustfmt")
+            }
+            "py" => {
+                let mut cmd = std::process::Command::new("ruff");
+                cmd.arg("format");
+                cmd.arg("-");
+                cmd.arg("--stdin-filename").arg(&path);
+                (Some(cmd), "ruff")
+            }
+            _ => (None, ""),
+        };
+
+        // Run the formatter if applicable
+        if let Some(mut cmd) = format_command {
+            let data = app
+                .workspace
+                .current_buffer
+                .as_ref()
+                .context(BUFFER_MISSING)?
+                .data();
+
+            let mut process = cmd
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .spawn()
+                .with_context(|| format!("{tool_name} not found. Is it installed?"))?;
+
+            {
+                let mut format_input = process.stdin.take().context("Failed to open stdin")?;
+                std::thread::spawn(move || {
+                    let _ = format_input.write_all(data.as_bytes());
+                });
+            }
+
+            let output = process
+                .wait_with_output()
+                .context("Failed to read format tool output")?;
+
+            if output.status.success() {
+                let content = String::from_utf8(output.stdout)
+                    .context("Failed to parse format tool output as UTF8")?;
+                app.workspace
+                    .current_buffer
+                    .as_mut()
+                    .context(BUFFER_MISSING)?
+                    .replace(content);
+
+                // Save the formatted content
+                app.workspace
+                    .current_buffer
+                    .as_mut()
+                    .unwrap()
+                    .save()
+                    .context(BUFFER_SAVE_FAILED)?;
+            } else {
+                let error = String::from_utf8(output.stderr)
+                    .unwrap_or_else(|_| String::from("Failed to parse stderr output as UTF8"));
+                // File was already saved before formatting; report the format error
+                bail!("{} failed: {}", tool_name, error);
+            }
+        }
+    } else {
+        commands::application::switch_to_path_mode(app)?;
+        if let Mode::Path(ref mut mode) = app.mode {
+            mode.save_on_accept = true;
+        }
+    }
+
+    Ok(())
+}
+
 pub fn format(app: &mut Application) -> Result {
     let buf = app
         .workspace

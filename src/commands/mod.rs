@@ -34,6 +34,7 @@ pub fn hash_map() -> HashMap<&'static str, Command> {
     );
 
     // Ex mode commands
+    map.insert("buffer::fmt_save", buffer::fmt_save);
     map.insert("view::page_down", view::page_down);
     map.insert("view::page_up", view::page_up);
     map.insert("ex::push_char", ex::push_char);
