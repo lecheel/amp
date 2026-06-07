@@ -2,8 +2,10 @@ use crate::commands::{self, Result};
 use crate::errors::*;
 use crate::input::KeyMap;
 use crate::models::application::{Application, Mode, ModeKey};
+use crate::models::application::{BufferMetadata, BufferType};
 use crate::util;
 use log::debug;
+use scribe::buffer::Position;
 use scribe::Buffer;
 use std::fs::{read_to_string, remove_file, File};
 use std::path::PathBuf;
@@ -53,7 +55,7 @@ pub fn switch_to_buffer_list_mode(app: &mut Application) -> Result {
 
             if is_list {
                 existing_list_id = Some(buf.id);
-                break; // Found it!
+                break;
             }
         }
         app.workspace.next_buffer();
@@ -86,41 +88,56 @@ pub fn switch_to_buffer_list_mode(app: &mut Application) -> Result {
                     .as_ref()
                     .map(|p| p.to_string_lossy().into_owned())
                     .unwrap_or_else(|| "[No Name]".to_string());
-                let modified = if buf.modified() { " [+]" } else { "" };
+                let modified = if app.effective_modified(buf) {
+                    " [+]"
+                } else {
+                    ""
+                };
                 lines.push(format!("{}{}", path_str, modified));
             }
         }
         app.workspace.next_buffer();
     }
 
-    // 3. Switch to the existing buffer and update it, or create a new one
+    // 3. Build content
+    let mut content = lines.join("\n");
+    if !content.is_empty() {
+        content.push('\n');
+    }
+
+    // 4. Create or update the buffer list
     if let Some(id) = existing_list_id {
         // Navigate to the existing list buffer
         while app.workspace.current_buffer.as_ref().map(|b| b.id) != Some(id) {
             app.workspace.next_buffer();
         }
 
-        // Update its content so it reflects the current workspace state
+        // Update content programmatically — virtual buffer, no save needed
         if let Some(buf) = app.workspace.current_buffer.as_mut() {
-            let mut content = lines.join("\n");
-            if !content.is_empty() {
-                content.push('\n');
-            }
-            buf.replace(content); // Replace the old list with the new one
-            buf.cursor
-                .move_to(scribe::buffer::Position { line: 0, offset: 0 }); // Jump to top
+            buf.replace(content);
+            buf.cursor.move_to(Position { line: 0, offset: 0 });
         }
     } else {
-        // Create a new list buffer
+        // Create a new virtual buffer
         let mut list_buffer = Buffer::new();
         list_buffer.path = Some(PathBuf::from("[Buffer List]"));
-        for line in &lines {
-            list_buffer.insert(format!("{}\n", line));
-        }
+        list_buffer.insert(content);
+        list_buffer.cursor.move_to(Position { line: 0, offset: 0 });
+
         util::add_buffer(list_buffer, app)?;
+
+        // Register as virtual AFTER add_buffer (which may reassign id)
+        if let Some(buf) = app.workspace.current_buffer.as_ref() {
+            app.buffer_registry.register(
+                buf.id,
+                BufferMetadata {
+                    buffer_type: BufferType::Virtual,
+                },
+            );
+        }
     }
 
-    // 4. Drop into normal mode to navigate the buffer naturally
+    // 5. Drop into normal mode
     commands::application::switch_to_normal_mode(app)?;
 
     Ok(())

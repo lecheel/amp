@@ -45,8 +45,8 @@ pub fn display(
     }
 
     // Position cursor at the end of the input prompt
-    let cursor_offset =
-        format!(" {} ", mode).graphemes(true).count() + mode.input.graphemes(true).count();
+    let cursor_offset = format!(" {} ", mode).graphemes(true).count()
+        + format!(" {}", mode.input).graphemes(true).count();
     let cursor_line = presenter.height() - 1;
     presenter.set_cursor(Some(Position {
         line: cursor_line,

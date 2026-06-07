@@ -10,6 +10,15 @@ use std::mem;
 use std::process::Stdio;
 
 pub fn save(app: &mut Application) -> Result {
+    let buf = app
+        .workspace
+        .current_buffer
+        .as_ref()
+        .context(BUFFER_MISSING)?;
+
+    if !app.buffer_registry.is_editable(buf.id) {
+        bail!("This buffer cannot be saved");
+    }
     remove_trailing_whitespace(app)?;
     ensure_trailing_newline(app)?;
 
@@ -184,16 +193,21 @@ pub fn merge_next_line(app: &mut Application) -> Result {
 }
 
 pub fn close(app: &mut Application) -> Result {
-    // Build confirmation check conditions.
+    let id = app
+        .workspace
+        .current_buffer
+        .as_ref()
+        .context(BUFFER_MISSING)?
+        .id;
+
     let (unmodified, empty) = if let Some(buf) = app.workspace.current_buffer.as_ref() {
-        (!buf.modified(), buf.data().is_empty())
+        (!app.effective_modified(buf), buf.data().is_empty())
     } else {
         bail!(BUFFER_MISSING);
     };
     let confirm_mode = matches!(app.mode, Mode::Confirm(_));
 
     if unmodified || empty || confirm_mode {
-        // Clean up view-related data for the buffer.
         app.view.forget_buffer(
             app.workspace
                 .current_buffer
@@ -201,8 +215,8 @@ pub fn close(app: &mut Application) -> Result {
                 .context(BUFFER_MISSING)?,
         )?;
         app.workspace.close_current_buffer();
+        app.buffer_registry.unregister(id);
     } else {
-        // Display a confirmation prompt before closing a modified buffer.
         app.switch_to(ModeKey::Confirm);
         if let Mode::Confirm(ref mut mode) = app.mode {
             mode.command = close
@@ -241,7 +255,7 @@ pub fn close_others(app: &mut Application) -> Result {
             if buf.id == id {
                 // We've only got one buffer open; we're done.
                 break;
-            } else if buf.modified() && !buf.data().is_empty() {
+            } else if app.effective_modified(buf) && !buf.data().is_empty() {
                 modified_buffer = true;
             } else {
                 app.view.forget_buffer(buf)?;
@@ -308,6 +322,16 @@ pub fn backspace(app: &mut Application) -> Result {
 }
 
 pub fn insert_char(app: &mut Application) -> Result {
+    let buf = app
+        .workspace
+        .current_buffer
+        .as_ref()
+        .context(BUFFER_MISSING)?;
+
+    // Guard: don't allow user edits on readonly/virtual buffers
+    if !app.buffer_registry.is_editable(buf.id) {
+        bail!("This buffer is not editable");
+    }
     if let Some(buffer) = app.workspace.current_buffer.as_mut() {
         if let Some(Key::Char(character)) = *app.view.last_key() {
             // TODO: Drop explicit call to to_string().
