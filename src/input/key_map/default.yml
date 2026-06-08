@@ -108,35 +108,26 @@ ex:
 pending_delete:
   $:
     - buffer::delete_rest_of_line
-    - application::switch_to_normal_mode
-  # dd: delete current line
   d:
     - buffer::delete_current_line
-    - application::switch_to_normal_mode
-  # dw: delete token
   w:
     - buffer::delete_token
-    - application::switch_to_normal_mode
-  # dj: delete current line and line below
   j:
     - application::switch_to_select_line_mode
     - cursor::move_down
     - selection::copy_and_delete
     - application::switch_to_normal_mode
     - view::scroll_to_cursor
-  # dk: delete current line and line above
   k:
     - application::switch_to_select_line_mode
     - cursor::move_up
     - selection::copy_and_delete
     - application::switch_to_normal_mode
     - view::scroll_to_cursor
-  # d$: delete to end of line
   L:
     - buffer::delete_rest_of_line
     - application::switch_to_normal_mode
   escape: application::switch_to_normal_mode
-  # Any unrecognized key cancels and re-processes in normal mode
   _:
     - application::switch_to_normal_mode
     - application::handle_input
@@ -145,20 +136,14 @@ pending_yank:
   # yy: copy current line
   y:
     - buffer::copy_current_line
-    - application::switch_to_normal_mode
-    - view::scroll_to_cursor
-  # yw: copy token
   w:
     - buffer::copy_token
-    - application::switch_to_normal_mode
-  # yj: copy current line and line below
   j:
     - application::switch_to_select_line_mode
     - cursor::move_down
     - selection::copy
     - application::switch_to_normal_mode
     - view::scroll_to_cursor
-  # yk: copy current line and line above
   k:
     - application::switch_to_select_line_mode
     - cursor::move_up
@@ -168,25 +153,20 @@ pending_yank:
   escape: application::switch_to_normal_mode
   _:
     - application::switch_to_normal_mode
-    - application::handle_input
 
 pending_change:
   # cc: change current line
   c:
     - buffer::change_current_line
-    - application::switch_to_normal_mode
   # cw: change token
   w:
     - buffer::change_token
-    - application::switch_to_normal_mode
   # c$: change to end of line
   L:
     - buffer::change_rest_of_line
-    - application::switch_to_normal_mode
   escape: application::switch_to_normal_mode
   _:
     - application::switch_to_normal_mode
-    - application::handle_input
 
 pending_left_bracket:
   # [[ : toggle line comment (preserving original [ binding)

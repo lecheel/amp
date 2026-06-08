@@ -105,12 +105,40 @@ pub fn delete_token(app: &mut Application) -> Result {
         commands::selection::copy_and_delete(app)?;
         commands::application::switch_to_normal_mode(app)?;
         commands::view::scroll_to_cursor(app)?;
+        app.last_action = Some(RepeatableAction::DeleteToken);
     } else {
-        delete_rest_of_line(app)?;
-        return Ok(()); // delete_rest_of_line sets its own last_action
+        // Inline the deletion to avoid double group nesting
+        let buffer = app
+            .workspace
+            .current_buffer
+            .as_mut()
+            .context(BUFFER_MISSING)?;
+        let starting_position = *buffer.cursor;
+        let target_line = buffer.cursor.line + 1;
+        buffer.delete_range(Range::new(
+            starting_position,
+            Position {
+                line: target_line,
+                offset: 0,
+            },
+        ));
+        buffer.insert("\n");
+        commands::application::switch_to_normal_mode(app)?;
+        commands::view::scroll_to_cursor(app)?;
+        app.last_action = Some(RepeatableAction::DeleteRestOfLine);
     }
     end_command_group(app)?;
-    app.last_action = Some(RepeatableAction::DeleteToken);
+    Ok(())
+}
+
+pub fn copy_rest_of_line(app: &mut Application) -> Result {
+    start_command_group(app)?;
+    commands::application::switch_to_select_mode(app)?;
+    commands::cursor::move_to_end_of_line(app)?;
+    commands::selection::copy(app)?;
+    commands::application::switch_to_normal_mode(app)?;
+    commands::view::scroll_to_cursor(app)?;
+    end_command_group(app)?;
     Ok(())
 }
 
@@ -765,6 +793,8 @@ pub fn delete_rest_of_line(app: &mut Application) -> Result {
         },
     ));
     buffer.insert("\n");
+    commands::application::switch_to_normal_mode(app)?;
+    commands::view::scroll_to_cursor(app)?;
     end_command_group(app)?;
     app.last_action = Some(RepeatableAction::DeleteRestOfLine);
     Ok(())
@@ -840,7 +870,21 @@ pub fn copy_token(app: &mut Application) -> Result {
 
 pub fn change_rest_of_line(app: &mut Application) -> Result {
     start_command_group(app)?;
-    commands::buffer::delete_rest_of_line(app)?;
+    let buffer = app
+        .workspace
+        .current_buffer
+        .as_mut()
+        .context(BUFFER_MISSING)?;
+    let starting_position = *buffer.cursor;
+    let target_line = buffer.cursor.line + 1;
+    buffer.delete_range(Range::new(
+        starting_position,
+        Position {
+            line: target_line,
+            offset: 0,
+        },
+    ));
+    buffer.insert("\n");
     app.last_action = Some(RepeatableAction::ChangeRestOfLine);
     commands::application::switch_to_insert_mode(app)?;
     Ok(())
