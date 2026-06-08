@@ -136,18 +136,15 @@ impl KeyMap {
     ///   }
     ///
     pub fn merge(&mut self, mut key_map: KeyMap) {
-        // Merge mode keybindings
-        // Use the entry API to ensure the mode HashMap exists before inserting,
-        // allowing user configs to define entirely new modes.
-        for (mode, other_key_bindings) in key_map.0.iter_mut() {
-            let key_bindings = self.0.entry(mode.to_string()).or_insert_with(HashMap::new);
+        // Drain moves the owned String keys, avoiding the &String mismatch
+        for (mode, mut other_key_bindings) in key_map.0.drain() {
+            let key_bindings = self.0.entry(mode).or_insert_with(HashMap::new);
             for (key, command) in other_key_bindings.drain() {
                 key_bindings.insert(key, command);
             }
         }
 
-        // Merge leader tree
-        // Insert/replace top-level leader keys from the user config.
+        // Drain the leader tree as well
         for (key, node) in key_map.1.drain() {
             self.1.insert(key, node);
         }
