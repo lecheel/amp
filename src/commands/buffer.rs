@@ -1,7 +1,7 @@
 use crate::commands::{self, Result};
 use crate::errors::*;
 use crate::input::Key;
-use crate::models::application::{Application, ClipboardContent, Mode, ModeKey};
+use crate::models::application::{Application, ClipboardContent, Mode, ModeKey, RepeatableAction};
 use crate::util;
 use crate::util::token::{adjacent_token_position, Direction};
 use scribe::buffer::{Buffer, Position, Range, Token};
@@ -79,14 +79,15 @@ pub fn delete(app: &mut Application) -> Result {
         .as_mut()
         .context(BUFFER_MISSING)?
         .delete();
+    if !app.replaying_change && matches!(app.mode, Mode::Insert) {
+        app.current_insert_keys.push(Key::Delete);
+    }
     commands::view::scroll_to_cursor(app)?;
-
     Ok(())
 }
 
 pub fn delete_token(app: &mut Application) -> Result {
     let mut subsequent_token_on_line = false;
-
     if let Some(buffer) = app.workspace.current_buffer.as_ref() {
         if let Some(position) = adjacent_token_position(buffer, false, Direction::Forward) {
             if position.line == buffer.cursor.line {
@@ -97,6 +98,7 @@ pub fn delete_token(app: &mut Application) -> Result {
         bail!(BUFFER_MISSING);
     }
 
+    start_command_group(app)?;
     if subsequent_token_on_line {
         commands::application::switch_to_select_mode(app)?;
         commands::cursor::move_to_start_of_next_token(app)?;
@@ -104,18 +106,22 @@ pub fn delete_token(app: &mut Application) -> Result {
         commands::application::switch_to_normal_mode(app)?;
         commands::view::scroll_to_cursor(app)?;
     } else {
-        commands::buffer::delete_rest_of_line(app)?;
+        delete_rest_of_line(app)?;
+        return Ok(()); // delete_rest_of_line sets its own last_action
     }
-
+    end_command_group(app)?;
+    app.last_action = Some(RepeatableAction::DeleteToken);
     Ok(())
 }
 
 pub fn delete_current_line(app: &mut Application) -> Result {
+    start_command_group(app)?;
     commands::application::switch_to_select_line_mode(app)?;
     commands::selection::copy_and_delete(app)?;
     commands::application::switch_to_normal_mode(app)?;
     commands::view::scroll_to_cursor(app)?;
-
+    end_command_group(app)?;
+    app.last_action = Some(RepeatableAction::DeleteCurrentLine);
     Ok(())
 }
 
@@ -129,6 +135,7 @@ pub fn copy_current_line(app: &mut Application) -> Result {
 }
 
 pub fn merge_next_line(app: &mut Application) -> Result {
+    start_command_group(app)?;
     let buffer = app
         .workspace
         .current_buffer
@@ -136,13 +143,9 @@ pub fn merge_next_line(app: &mut Application) -> Result {
         .context(BUFFER_MISSING)?;
     let current_line = buffer.cursor.line;
     let data = buffer.data();
-
-    // Don't bother if there isn't a line below.
     data.lines()
         .nth(current_line + 1)
         .context("No line below current line")?;
-
-    // Join the two lines.
     let mut merged_lines: String = buffer
         .data()
         .lines()
@@ -157,16 +160,9 @@ pub fn merge_next_line(app: &mut Application) -> Result {
             }
         })
         .collect();
-
-    // Append a newline if there is a line below the next.
     if buffer.data().lines().nth(current_line + 2).is_some() {
         merged_lines.push('\n');
     }
-
-    // Remove the two lines, move to the start of the line,
-    // insert the merged lines, and position the cursor,
-    // batched as a single operation.
-    buffer.start_operation_group();
     let target_position = Position {
         line: current_line,
         offset: data.lines().nth(current_line).unwrap().len(),
@@ -187,8 +183,8 @@ pub fn merge_next_line(app: &mut Application) -> Result {
     });
     buffer.insert(merged_lines);
     buffer.cursor.move_to(target_position);
-    buffer.end_operation_group();
-
+    end_command_group(app)?;
+    app.last_action = Some(RepeatableAction::MergeNextLine);
     Ok(())
 }
 
@@ -350,7 +346,6 @@ pub fn close_others_confirm(app: &mut Application) -> Result {
 
 pub fn backspace(app: &mut Application) -> Result {
     let mut outdent = false;
-
     if let Some(buffer) = app.workspace.current_buffer.as_mut() {
         if buffer.cursor.offset == 0 {
             buffer.cursor.move_up();
@@ -372,9 +367,11 @@ pub fn backspace(app: &mut Application) -> Result {
     } else {
         bail!(BUFFER_MISSING);
     }
-
     if outdent {
         commands::buffer::outdent_line(app)?;
+    }
+    if !app.replaying_change {
+        app.current_insert_keys.push(Key::Backspace);
     }
     commands::view::scroll_to_cursor(app)
 }
@@ -385,16 +382,16 @@ pub fn insert_char(app: &mut Application) -> Result {
         .current_buffer
         .as_ref()
         .context(BUFFER_MISSING)?;
-
-    // Guard: don't allow user edits on readonly/virtual buffers
     if !app.view.buffer_registry.is_editable(buf.id) {
         bail!("This buffer is not editable");
     }
     if let Some(buffer) = app.workspace.current_buffer.as_mut() {
         if let Some(Key::Char(character)) = *app.view.last_key() {
-            // TODO: Drop explicit call to to_string().
             buffer.insert(character.to_string());
             buffer.cursor.move_right();
+            if !app.replaying_change {
+                app.current_insert_keys.push(Key::Char(character));
+            }
         } else {
             bail!("No character to insert");
         }
@@ -402,7 +399,6 @@ pub fn insert_char(app: &mut Application) -> Result {
         bail!(BUFFER_MISSING);
     }
     commands::view::scroll_to_cursor(app)?;
-
     Ok(())
 }
 
@@ -476,21 +472,16 @@ pub fn insert_paste(app: &mut Application, text: String) -> Result {
 /// of the previous line's leading whitespace.
 pub fn insert_newline(app: &mut Application) -> Result {
     if let Some(buffer) = app.workspace.current_buffer.as_mut() {
-        // Insert the newline character.
         buffer.insert("\n");
-
         match app.mode {
             Mode::Paste => {
                 buffer.cursor.move_down();
                 buffer.cursor.move_to_start_of_line();
             }
             _ => {
-                // Get the cursor position before moving it to the start of the new line.
                 let position = buffer.cursor.clone();
                 buffer.cursor.move_down();
                 buffer.cursor.move_to_start_of_line();
-
-                // Get a slice of the buffer up to and including the current line.
                 let data = buffer.data();
                 let end_of_current_line = data
                     .lines()
@@ -499,16 +490,12 @@ pub fn insert_newline(app: &mut Application) -> Result {
                     .unwrap();
                 let offset = end_of_current_line - (data.as_str().as_ptr() as usize);
                 let (previous_content, _) = data.split_at(offset);
-
-                // Searching backwards, copy the nearest non-blank line's indent content.
                 let nearest_non_blank_line =
                     previous_content.lines().rev().find(|line| !line.is_empty());
                 let indent_content = match nearest_non_blank_line {
                     Some(line) => line.chars().take_while(|&c| c.is_whitespace()).collect(),
                     None => String::new(),
                 };
-
-                // Insert and move to the end of the indent content.
                 let indent_length = indent_content.chars().count();
                 buffer.insert(indent_content);
                 buffer.cursor.move_to(Position {
@@ -520,106 +507,103 @@ pub fn insert_newline(app: &mut Application) -> Result {
     } else {
         bail!(BUFFER_MISSING);
     }
+    if !app.replaying_change {
+        app.current_insert_keys.push(Key::Enter);
+    }
     commands::view::scroll_to_cursor(app)?;
-
     Ok(())
 }
 
 pub fn indent_line(app: &mut Application) -> Result {
+    // Extract data before starting the group to avoid double mutable borrow
+    let (tab_content, target_position, lines) = {
+        let buffer = app
+            .workspace
+            .current_buffer
+            .as_mut()
+            .context(BUFFER_MISSING)?;
+        let tab_content = app.preferences.borrow().tab_content(buffer.path.as_ref());
+        let target_position = match app.mode {
+            Mode::Insert => Position {
+                line: buffer.cursor.line,
+                offset: buffer.cursor.offset + tab_content.chars().count(),
+            },
+            _ => *buffer.cursor.clone(),
+        };
+        let lines = match app.mode {
+            Mode::SelectLine(ref mode) => {
+                if mode.anchor >= buffer.cursor.line {
+                    buffer.cursor.line..mode.anchor + 1
+                } else {
+                    mode.anchor..buffer.cursor.line + 1
+                }
+            }
+            _ => buffer.cursor.line..buffer.cursor.line + 1,
+        };
+        (tab_content, target_position, lines)
+    };
+
+    start_command_group(app)?;
     let buffer = app
         .workspace
         .current_buffer
         .as_mut()
         .context(BUFFER_MISSING)?;
-    let tab_content = app.preferences.borrow().tab_content(buffer.path.as_ref());
-
-    let target_position = match app.mode {
-        Mode::Insert => Position {
-            line: buffer.cursor.line,
-            offset: buffer.cursor.offset + tab_content.chars().count(),
-        },
-        _ => *buffer.cursor.clone(),
-    };
-
-    // Get the range of lines we'll outdent based on
-    // either the current selection or cursor line.
-    let lines = match app.mode {
-        Mode::SelectLine(ref mode) => {
-            if mode.anchor >= buffer.cursor.line {
-                buffer.cursor.line..mode.anchor + 1
-            } else {
-                mode.anchor..buffer.cursor.line + 1
-            }
-        }
-        _ => buffer.cursor.line..buffer.cursor.line + 1,
-    };
-
-    // Move to the start of the current line and
-    // insert the content, as a single operation.
-    buffer.start_operation_group();
     for line in lines {
         buffer.cursor.move_to(Position { line, offset: 0 });
         buffer.insert(tab_content.clone());
     }
-    buffer.end_operation_group();
-
-    // Move to the original position, shifted to compensate for the indent.
     buffer.cursor.move_to(target_position);
-
+    end_command_group(app)?;
+    app.last_action = Some(RepeatableAction::IndentLine);
     Ok(())
 }
 
 pub fn outdent_line(app: &mut Application) -> Result {
+    // Extract data before starting the group to avoid double mutable borrow
+    let (tab_content, lines, cursor_line, cursor_offset) = {
+        let buffer = app
+            .workspace
+            .current_buffer
+            .as_mut()
+            .context(BUFFER_MISSING)?;
+        let tab_content = app.preferences.borrow().tab_content(buffer.path.as_ref());
+        let lines = match app.mode {
+            Mode::SelectLine(ref mode) => {
+                if mode.anchor >= buffer.cursor.line {
+                    buffer.cursor.line..mode.anchor + 1
+                } else {
+                    mode.anchor..buffer.cursor.line + 1
+                }
+            }
+            _ => buffer.cursor.line..buffer.cursor.line + 1,
+        };
+        (tab_content, lines, buffer.cursor.line, buffer.cursor.offset)
+    };
+
+    start_command_group(app)?;
     let buffer = app
         .workspace
         .current_buffer
         .as_mut()
         .context(BUFFER_MISSING)?;
-    let tab_content = app.preferences.borrow().tab_content(buffer.path.as_ref());
-
-    // FIXME: Determine this based on file type and/or user config.
     let data = buffer.data();
-
-    // Get the range of lines we'll outdent based on
-    // either the current selection or cursor line.
-    let lines = match app.mode {
-        Mode::SelectLine(ref mode) => {
-            if mode.anchor >= buffer.cursor.line {
-                buffer.cursor.line..mode.anchor + 1
-            } else {
-                mode.anchor..buffer.cursor.line + 1
-            }
-        }
-        _ => buffer.cursor.line..buffer.cursor.line + 1,
-    };
-
-    // Group the individual outdent operations as one.
-    buffer.start_operation_group();
-
     for line in lines {
         if let Some(content) = data.lines().nth(line) {
             let mut space_char_count = 0;
-
-            // Check for leading whitespace.
             if tab_content.starts_with('\t') {
-                // We're looking for a tab character.
                 if content.starts_with('\t') {
                     space_char_count = 1;
                 }
             } else {
-                // We're looking for spaces.
                 for character in content.chars().take(tab_content.chars().count()) {
                     if character == ' ' {
                         space_char_count += 1;
                     } else {
-                        // We've run into a non-whitespace character; stop here.
                         break;
                     }
                 }
             }
-
-            // Remove leading whitespace, up to indent size,
-            // if we found any, and adjust cursor accordingly.
             if space_char_count > 0 {
                 buffer.delete_range(Range::new(
                     Position { line, offset: 0 },
@@ -628,11 +612,12 @@ pub fn outdent_line(app: &mut Application) -> Result {
                         offset: space_char_count,
                     },
                 ));
-
-                // Figure out where the cursor should sit, guarding against underflow.
-                let target_offset = buffer.cursor.offset.saturating_sub(space_char_count);
+                let target_offset = if line == cursor_line {
+                    cursor_offset.saturating_sub(space_char_count)
+                } else {
+                    buffer.cursor.offset
+                };
                 let target_line = buffer.cursor.line;
-
                 buffer.cursor.move_to(Position {
                     line: target_line,
                     offset: target_offset,
@@ -640,45 +625,49 @@ pub fn outdent_line(app: &mut Application) -> Result {
             }
         }
     }
-
-    // Finish grouping the individual outdent operations as one.
-    buffer.end_operation_group();
-
+    end_command_group(app)?;
+    app.last_action = Some(RepeatableAction::OutdentLine);
     Ok(())
 }
 
 pub fn toggle_line_comment(app: &mut Application) -> Result {
+    // Extract data before starting the group to avoid double mutable borrow
+    let (comment_prefix, line_numbers, original_cursor) = {
+        let buffer = app
+            .workspace
+            .current_buffer
+            .as_mut()
+            .context(BUFFER_MISSING)?;
+        let original_cursor = *buffer.cursor.clone();
+        let comment_prefix = {
+            let path = buffer.path.as_ref().context(BUFFER_PATH_MISSING)?;
+            let prefix = app
+                .preferences
+                .borrow()
+                .line_comment_prefix(path)
+                .context("No line comment prefix for the current buffer")?;
+            prefix + " "
+        };
+        let line_numbers = match app.mode {
+            Mode::SelectLine(ref mode) => {
+                if mode.anchor >= buffer.cursor.line {
+                    buffer.cursor.line..mode.anchor + 1
+                } else {
+                    mode.anchor..buffer.cursor.line + 1
+                }
+            }
+            _ => buffer.cursor.line..buffer.cursor.line + 1,
+        };
+        (comment_prefix, line_numbers, original_cursor)
+    };
+
+    start_command_group(app)?;
+
     let buffer = app
         .workspace
         .current_buffer
         .as_mut()
         .context(BUFFER_MISSING)?;
-    let original_cursor = *buffer.cursor.clone();
-
-    let comment_prefix = {
-        let path = buffer.path.as_ref().context(BUFFER_PATH_MISSING)?;
-        let prefix = app
-            .preferences
-            .borrow()
-            .line_comment_prefix(path)
-            .context("No line comment prefix for the current buffer")?;
-
-        prefix + " " // implicitly add trailing space
-    };
-
-    // Get the range of lines we'll comment based on
-    // either the current selection or cursor line.
-    let line_numbers = match app.mode {
-        Mode::SelectLine(ref mode) => {
-            if mode.anchor >= buffer.cursor.line {
-                buffer.cursor.line..mode.anchor + 1
-            } else {
-                mode.anchor..buffer.cursor.line + 1
-            }
-        }
-        _ => buffer.cursor.line..buffer.cursor.line + 1,
-    };
-
     let buffer_range = Range::new(
         Position {
             line: line_numbers.start,
@@ -689,22 +678,14 @@ pub fn toggle_line_comment(app: &mut Application) -> Result {
             offset: 0,
         },
     );
-
     let buffer_range_content = buffer.read(&buffer_range).context(CURRENT_LINE_MISSING)?;
-
-    // Produce a collection of (<line number>, <line content>) tuples, but only for
-    // non-empty lines.
     let lines: Vec<(usize, &str)> = line_numbers
-        .zip(buffer_range_content.split('\n')) // produces (<line number>, <line content>)
-        .filter(|(_, line)| !line.trim().is_empty()) // filter out any empty (non-whitespace-only) lines
+        .zip(buffer_range_content.split('\n'))
+        .filter(|(_, line)| !line.trim().is_empty())
         .collect();
 
-    // We look at all lines to see if they start with `comment_prefix` or not.
-    // If even a single line does not, we need to comment all lines out,
-    // otherwise remove `comment_prefix` on the start of each line.
     let (toggle, offset) = lines
         .iter()
-        // Map (<line number>, <line content>) to (<has comment>, <number of spaces at line start>)
         .map(|(_, line)| {
             let content = line.trim_start();
             (
@@ -712,9 +693,6 @@ pub fn toggle_line_comment(app: &mut Application) -> Result {
                 line.len() - content.len(),
             )
         })
-        // Now fold it into a single (<comment in or out>, <comment offset>) tuple.
-        // As soon as <has comment> is `false` a single time, <comment in or out>
-        // will result in `false`.
         .fold(
             (true, std::usize::MAX),
             |(folded_toggle, folded_offset), (has_comment, offset)| {
@@ -722,19 +700,15 @@ pub fn toggle_line_comment(app: &mut Application) -> Result {
             },
         );
 
-    // Move to the start of each of the line's content and
-    // insert/remove the comments, as a single operation.
-    buffer.start_operation_group();
     if !toggle {
         add_line_comment(buffer, &lines, offset, &comment_prefix);
     } else {
         remove_line_comment(buffer, &lines, &comment_prefix);
     }
-    buffer.end_operation_group();
-
-    // Restore original cursor
     buffer.cursor.move_to(original_cursor);
 
+    end_command_group(app)?;
+    app.last_action = Some(RepeatableAction::ToggleLineComment);
     Ok(())
 }
 
@@ -767,24 +741,22 @@ fn remove_line_comment(buffer: &mut Buffer, lines: &[(usize, &str)], prefix: &st
 }
 
 pub fn change_token(app: &mut Application) -> Result {
+    start_command_group(app)?;
     commands::buffer::delete_token(app)?;
+    app.last_action = Some(RepeatableAction::ChangeToken);
     commands::application::switch_to_insert_mode(app)?;
-
     Ok(())
 }
 
 pub fn delete_rest_of_line(app: &mut Application) -> Result {
+    start_command_group(app)?;
     let buffer = app
         .workspace
         .current_buffer
         .as_mut()
         .context(BUFFER_MISSING)?;
-
-    // Create a range extending from the
-    // cursor's current position to the next line.
     let starting_position = *buffer.cursor;
     let target_line = buffer.cursor.line + 1;
-    buffer.start_operation_group();
     buffer.delete_range(Range::new(
         starting_position,
         Position {
@@ -792,14 +764,14 @@ pub fn delete_rest_of_line(app: &mut Application) -> Result {
             offset: 0,
         },
     ));
-
-    // Since we've removed a newline as part of the range, re-add it.
     buffer.insert("\n");
-
+    end_command_group(app)?;
+    app.last_action = Some(RepeatableAction::DeleteRestOfLine);
     Ok(())
 }
 
 pub fn change_current_line(app: &mut Application) -> Result {
+    start_command_group(app)?;
     let buffer = app
         .workspace
         .current_buffer
@@ -807,18 +779,12 @@ pub fn change_current_line(app: &mut Application) -> Result {
         .context(BUFFER_MISSING)?;
     let current_line = buffer.cursor.line;
     let data = buffer.data();
-
     if let Some(line_content) = data.lines().nth(current_line) {
-        // Preserve the leading whitespace (indentation)
         let indent: String = line_content
             .chars()
             .take_while(|&c| c.is_whitespace())
             .collect();
         let end_offset = line_content.chars().count();
-
-        buffer.start_operation_group();
-
-        // Delete from start of line to end of line content (before newline)
         buffer.delete_range(Range::new(
             Position {
                 line: current_line,
@@ -829,20 +795,15 @@ pub fn change_current_line(app: &mut Application) -> Result {
                 offset: end_offset,
             },
         ));
-
-        // Re-insert the indent and position cursor
         buffer.insert(indent.clone());
         buffer.cursor.move_to(Position {
             line: current_line,
             offset: indent.chars().count(),
         });
-
-        buffer.end_operation_group();
     }
-
+    app.last_action = Some(RepeatableAction::ChangeCurrentLine);
     commands::application::switch_to_insert_mode(app)?;
     commands::view::scroll_to_cursor(app)?;
-
     Ok(())
 }
 
@@ -878,29 +839,36 @@ pub fn copy_token(app: &mut Application) -> Result {
 }
 
 pub fn change_rest_of_line(app: &mut Application) -> Result {
+    start_command_group(app)?;
     commands::buffer::delete_rest_of_line(app)?;
+    app.last_action = Some(RepeatableAction::ChangeRestOfLine);
     commands::application::switch_to_insert_mode(app)?;
-
     Ok(())
 }
 
 pub fn start_command_group(app: &mut Application) -> Result {
-    app.workspace
-        .current_buffer
-        .as_mut()
-        .context(BUFFER_MISSING)?
-        .start_operation_group();
-
+    if app.command_group_depth == 0 {
+        app.workspace
+            .current_buffer
+            .as_mut()
+            .context(BUFFER_MISSING)?
+            .start_operation_group();
+    }
+    app.command_group_depth += 1;
     Ok(())
 }
 
 pub fn end_command_group(app: &mut Application) -> Result {
-    app.workspace
-        .current_buffer
-        .as_mut()
-        .context(BUFFER_MISSING)?
-        .end_operation_group();
-
+    if app.command_group_depth > 0 {
+        app.command_group_depth -= 1;
+        if app.command_group_depth == 0 {
+            app.workspace
+                .current_buffer
+                .as_mut()
+                .context(BUFFER_MISSING)?
+                .end_operation_group();
+        }
+    }
     Ok(())
 }
 
@@ -932,23 +900,19 @@ pub fn paste(app: &mut Application) -> Result {
         _ => true,
     };
 
-    // TODO: Clean up duplicate buffer.insert(content.clone()) calls.
+    start_command_group(app)?;
     if let Some(buffer) = app.workspace.current_buffer.as_mut() {
         match *app.clipboard.get_content() {
             ClipboardContent::Inline(ref content) => buffer.insert(content.clone()),
             ClipboardContent::Block(ref content) => {
                 let original_cursor_position = *buffer.cursor.clone();
                 let line = original_cursor_position.line;
-
                 if insert_below {
                     buffer.cursor.move_to(Position {
                         line: line + 1,
                         offset: 0,
                     });
-
                     if *buffer.cursor == original_cursor_position {
-                        // That didn't work because we're at the last line.
-                        // Move to the end of the line to insert the data.
                         if let Some(line_content) = buffer.data().lines().nth(line) {
                             buffer.cursor.move_to(Position {
                                 line,
@@ -957,8 +921,6 @@ pub fn paste(app: &mut Application) -> Result {
                             buffer.insert(format!("\n{content}"));
                             buffer.cursor.move_to(original_cursor_position);
                         } else {
-                            // We're on a trailing newline, which doesn't
-                            // have any data; just insert the content here.
                             buffer.insert(content.clone());
                         }
                     } else {
@@ -973,31 +935,36 @@ pub fn paste(app: &mut Application) -> Result {
     } else {
         bail!(BUFFER_MISSING);
     }
+    end_command_group(app)?;
+    app.last_action = Some(RepeatableAction::Paste);
     commands::view::scroll_to_cursor(app)?;
-
     Ok(())
 }
 
 pub fn paste_above(app: &mut Application) -> Result {
-    let buffer = app
-        .workspace
-        .current_buffer
-        .as_mut()
-        .context(BUFFER_MISSING)?;
+    // Extract content before any borrows
+    let content = match *app.clipboard.get_content() {
+        ClipboardContent::Block(ref content) => Some(content.clone()),
+        _ => None,
+    };
 
-    if let ClipboardContent::Block(ref content) = *app.clipboard.get_content() {
+    if let Some(content) = content {
+        start_command_group(app)?;
+        let buffer = app
+            .workspace
+            .current_buffer
+            .as_mut()
+            .context(BUFFER_MISSING)?;
         let mut start_of_line = Position {
             line: buffer.cursor.line,
             offset: 0,
         };
-
-        // Temporarily move the cursor to the start of the line
-        // to insert the clipboard content (without allocating).
         mem::swap(&mut *buffer.cursor, &mut start_of_line);
-        buffer.insert(content.clone());
+        buffer.insert(content);
         mem::swap(&mut *buffer.cursor, &mut start_of_line);
+        end_command_group(app)?;
+        app.last_action = Some(RepeatableAction::PasteAbove);
     }
-
     Ok(())
 }
 
@@ -1104,12 +1071,6 @@ pub fn ensure_trailing_newline(app: &mut Application) -> Result {
 }
 
 pub fn insert_tab(app: &mut Application) -> Result {
-    // If completion ghost text is showing, Tab is handled by completion::accept,
-    // so we must not also insert a tab here.
-    if app.view.completion.is_some() {
-        return Ok(());
-    }
-
     let buffer = app
         .workspace
         .current_buffer
@@ -1120,6 +1081,9 @@ pub fn insert_tab(app: &mut Application) -> Result {
     buffer.insert(tab_content);
     for _ in 0..tab_content_width {
         buffer.cursor.move_right();
+    }
+    if !app.replaying_change {
+        app.current_insert_keys.push(Key::Tab);
     }
     Ok(())
 }

@@ -6,6 +6,7 @@ mod event;
 pub mod git_gutter;
 pub mod modes;
 mod preferences;
+mod repeat_action;
 mod syntax_loader;
 
 // Published API
@@ -17,6 +18,7 @@ pub use self::event::Event;
 pub use self::git_gutter::GitGutterStatus;
 pub use self::modes::{Mode, ModeKey};
 pub use self::preferences::Preferences;
+pub use self::repeat_action::RepeatableAction;
 
 use self::clipboard::Clipboard;
 use self::modes::MRUMode;
@@ -24,6 +26,7 @@ use self::modes::*;
 use self::syntax_loader::SyntaxLoader;
 use crate::commands;
 use crate::errors::*;
+use crate::input::Key;
 use crate::presenters;
 use crate::view::View;
 use git2::Repository;
@@ -54,6 +57,11 @@ pub struct Application {
     previous_mode: ModeKey,
     modes: HashMap<ModeKey, Mode>,
     pub saved_buffer_positions: PositionMap,
+    pub command_group_depth: usize,
+    pub last_action: Option<RepeatableAction>,
+    pub last_insert_keys: Vec<Key>,
+    pub current_insert_keys: Vec<Key>,
+    pub replaying_change: bool,
 }
 
 impl Application {
@@ -84,6 +92,11 @@ impl Application {
             event_channel,
             events,
             saved_buffer_positions,
+            command_group_depth: 0,
+            last_action: None,
+            last_insert_keys: Vec::new(),
+            current_insert_keys: Vec::new(),
+            replaying_change: false,
         };
 
         app.create_modes()?;

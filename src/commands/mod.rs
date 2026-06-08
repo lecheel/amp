@@ -16,6 +16,7 @@ pub mod mru;
 pub mod open;
 pub mod path;
 pub mod preferences;
+pub mod repeat;
 pub mod rg;
 pub mod search;
 pub mod search_select;

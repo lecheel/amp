@@ -1,4 +1,5 @@
 normal:
+  .: repeat::repeat_last_change
   up: cursor::move_up
   down: cursor::move_down
   left: cursor::move_left
@@ -105,6 +106,9 @@ ex:
 # Operator-pending modes: d/y/c waits for a motion or repeated operator
 
 pending_delete:
+  $:
+    - buffer::delete_rest_of_line
+    - application::switch_to_normal_mode
   # dd: delete current line
   d:
     - buffer::delete_current_line

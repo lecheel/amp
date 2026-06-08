@@ -49,6 +49,11 @@ pub fn accept(app: &mut Application) -> Result {
                     if let Some(buffer) = app.workspace.current_buffer.as_mut() {
                         if !suffix.is_empty() {
                             buffer.insert(suffix.to_string());
+                            if !app.replaying_change {
+                                for c in suffix.chars() {
+                                    app.current_insert_keys.push(Key::Char(c));
+                                }
+                            }
                             for _ in 0..suffix.chars().count() {
                                 buffer.cursor.move_right();
                             }

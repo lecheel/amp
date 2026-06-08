@@ -4,6 +4,7 @@ use crate::input::key_map::LeaderLookup;
 use crate::input::KeyMap;
 use crate::models::application::modes::open::DisplayablePath;
 use crate::models::application::BufferPosition;
+use crate::models::application::RepeatableAction;
 use crate::models::application::{Application, Mode, ModeKey};
 use crate::models::application::{BufferMetadata, BufferType};
 use crate::util;
@@ -270,21 +271,36 @@ pub fn switch_to_ex_mode(app: &mut Application) -> Result {
 }
 
 pub fn switch_to_normal_mode(app: &mut Application) -> Result {
+    let was_insert = matches!(app.mode, Mode::Insert);
+
     let _ = commands::buffer::end_command_group(app);
     app.switch_to(ModeKey::Normal);
+
+    // Finalize the insert sequence when exiting insert mode
+    if was_insert && !app.current_insert_keys.is_empty() {
+        app.last_insert_keys = app.current_insert_keys.clone();
+
+        // If the action that started this insert mode wasn't a change action
+        // (e.g. plain 'i'), record a generic InsertModeEntry
+        if app.last_action.is_none() {
+            app.last_action = Some(RepeatableAction::InsertModeEntry);
+        }
+    }
 
     Ok(())
 }
 
 pub fn switch_to_insert_mode(app: &mut Application) -> Result {
     if app.workspace.current_buffer.is_some() {
-        commands::buffer::start_command_group(app)?;
+        if app.command_group_depth == 0 {
+            commands::buffer::start_command_group(app)?;
+        }
+        app.current_insert_keys.clear();
         app.switch_to(ModeKey::Insert);
         commands::view::scroll_to_cursor(app)?;
     } else {
         bail!(BUFFER_MISSING);
     }
-
     Ok(())
 }
 
