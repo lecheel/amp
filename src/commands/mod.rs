@@ -12,6 +12,7 @@ pub mod ex;
 pub mod git;
 pub mod jump;
 pub mod line_jump;
+pub mod mru;
 pub mod open;
 pub mod path;
 pub mod preferences;
@@ -56,6 +57,7 @@ pub fn hash_map() -> HashMap<&'static str, Command> {
     map.insert("completion::select_previous", completion::select_previous);
     map.insert("completion::accept", completion::accept);
     map.insert("completion::cancel", completion::cancel);
+    map.insert("mru::accept", mru::accept);
     map.insert("ex::select_next_completion", ex::select_next_completion);
     map.insert(
         "ex::select_previous_completion",

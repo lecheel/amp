@@ -10,7 +10,7 @@ mod syntax_loader;
 
 // Published API
 pub use self::buffer_metadata::{BufferMetadata, BufferRegistry, BufferType};
-pub use self::buffer_positions::PositionMap;
+pub use self::buffer_positions::{BufferPosition, PositionMap};
 pub use self::clipboard::ClipboardContent;
 pub use self::completion::{CompletionOrigin, CompletionState};
 pub use self::event::Event;
@@ -19,11 +19,11 @@ pub use self::modes::{Mode, ModeKey};
 pub use self::preferences::Preferences;
 
 use self::clipboard::Clipboard;
+use self::modes::MRUMode;
 use self::modes::*;
 use self::syntax_loader::SyntaxLoader;
 use crate::commands;
 use crate::errors::*;
-use crate::models::application::buffer_positions::BufferPosition;
 use crate::presenters;
 use crate::view::View;
 use git2::Repository;
@@ -252,6 +252,12 @@ impl Application {
                 &mut self.view,
                 &self.error,
             ),
+            Mode::MRU(ref mut mode) => presenters::modes::search_select::display(
+                &mut self.workspace,
+                mode,
+                &mut self.view,
+                &self.error,
+            ),
             Mode::Insert => {
                 presenters::modes::insert::display(&mut self.workspace, &mut self.view, &self.error)
             }
@@ -450,6 +456,13 @@ impl Application {
                     Some("search_select")
                 }
             }
+            Mode::MRU(ref mode) => {
+                if mode.insert_mode() {
+                    Some("search_select_insert")
+                } else {
+                    Some("search_select")
+                }
+            }
             Mode::Open(ref mode) => {
                 if mode.insert_mode() {
                     Some("search_select_insert")
@@ -556,7 +569,12 @@ impl Application {
             ModeKey::PendingYank,
             Mode::PendingYank(PendingYankMode::new()),
         );
-
+        self.modes.insert(
+            ModeKey::MRU,
+            Mode::MRU(MRUMode::new(
+                self.preferences.borrow().search_select_config(),
+            )),
+        );
         self.modes.insert(
             ModeKey::Command,
             Mode::Command(CommandMode::new(

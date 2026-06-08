@@ -3,6 +3,7 @@ mod confirm;
 mod ex;
 pub mod jump;
 mod line_jump;
+mod mru;
 pub mod open;
 mod path;
 mod search;
@@ -14,6 +15,7 @@ mod syntax;
 mod theme;
 
 pub use self::ex::ExMode;
+pub use self::mru::MRUMode;
 use std::fmt;
 
 pub enum Mode {
@@ -40,6 +42,7 @@ pub enum Mode {
     SymbolJump(SymbolJumpMode),
     Syntax(SyntaxMode),
     Theme(ThemeMode),
+    MRU(MRUMode),
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -67,6 +70,7 @@ pub enum ModeKey {
     SymbolJump,
     Syntax,
     Theme,
+    MRU,
 }
 
 pub use self::command::CommandMode;

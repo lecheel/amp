@@ -2,6 +2,8 @@ use crate::commands::{self, Result};
 use crate::errors::*;
 use crate::input::key_map::LeaderLookup;
 use crate::input::KeyMap;
+use crate::models::application::modes::open::DisplayablePath;
+use crate::models::application::BufferPosition;
 use crate::models::application::{Application, Mode, ModeKey};
 use crate::models::application::{BufferMetadata, BufferType};
 use crate::util;
@@ -10,6 +12,7 @@ use scribe::buffer::Position;
 use scribe::Buffer;
 use std::fs::{read_to_string, remove_file, File};
 use std::path::PathBuf;
+use std::time::SystemTime;
 
 pub fn handle_input(app: &mut Application) -> Result {
     // ── unified completion popup gets first crack ──
@@ -36,6 +39,48 @@ pub fn handle_input(app: &mut Application) -> Result {
 }
 
 pub fn nop(_app: &mut Application) -> Result {
+    Ok(())
+}
+
+pub fn switch_to_mru_mode(app: &mut Application) -> Result {
+    // Update the current buffer's last_used time before we list the buffers
+    if let Some(buf) = app.workspace.current_buffer.as_ref() {
+        if let Some(path) = buf.path.as_ref() {
+            let path_str = path.to_string_lossy().to_string();
+            if !path_str.starts_with('[') && !path_str.is_empty() {
+                app.saved_buffer_positions
+                    .entry(path_str)
+                    .and_modify(|e| e.last_used = SystemTime::now())
+                    .or_insert(BufferPosition {
+                        position: *buf.cursor,
+                        last_used: SystemTime::now(),
+                    });
+            }
+        }
+    }
+
+    // Gather all saved positions (most recent first)
+    let mut entries: Vec<_> = app.saved_buffer_positions.iter().collect();
+    entries.sort_by(|a, b| b.1.last_used.cmp(&a.1.last_used));
+
+    // Filter out virtual buffers and files that no longer exist on disk
+    let displayable_paths: Vec<DisplayablePath> = entries
+        .into_iter()
+        .filter(|(path_str, _)| {
+            !path_str.starts_with('[') && !path_str.is_empty() && PathBuf::from(path_str).exists()
+        })
+        .map(|(path_str, _)| DisplayablePath(PathBuf::from(path_str)))
+        .collect();
+
+    app.switch_to(ModeKey::MRU);
+    if let Mode::MRU(ref mut mode) = app.mode {
+        mode.reset(
+            displayable_paths,
+            app.preferences.borrow().search_select_config(),
+        );
+    }
+
+    commands::search_select::search(app)?;
     Ok(())
 }
 

@@ -13,6 +13,11 @@ pub fn accept(app: &mut Application) -> Result {
             // Run the selected command.
             (selection.command)(app)?;
         }
+        Mode::MRU(ref mut mode) => {
+            let _selection = mode.selection().context("No buffer selected")?;
+            // Delegate to the specific MRU accept logic
+            commands::mru::accept(app)?;
+        }
         Mode::Open(ref mut mode) => {
             if mode.selection().is_none() {
                 bail!("No buffer selected");
@@ -80,6 +85,7 @@ pub fn accept(app: &mut Application) -> Result {
 
 pub fn search(app: &mut Application) -> Result {
     match app.mode {
+        Mode::MRU(ref mut mode) => mode.search(),
         Mode::Command(ref mut mode) => mode.search(),
         Mode::Open(ref mut mode) => mode.search(),
         Mode::Theme(ref mut mode) => mode.search(),
@@ -92,6 +98,7 @@ pub fn search(app: &mut Application) -> Result {
 
 pub fn select_next(app: &mut Application) -> Result {
     match app.mode {
+        Mode::MRU(ref mut mode) => mode.select_next(),
         Mode::Command(ref mut mode) => mode.select_next(),
         Mode::Open(ref mut mode) => mode.select_next(),
         Mode::Theme(ref mut mode) => mode.select_next(),
@@ -104,6 +111,7 @@ pub fn select_next(app: &mut Application) -> Result {
 
 pub fn select_previous(app: &mut Application) -> Result {
     match app.mode {
+        Mode::MRU(ref mut mode) => mode.select_previous(),
         Mode::Command(ref mut mode) => mode.select_previous(),
         Mode::Open(ref mut mode) => mode.select_previous(),
         Mode::Theme(ref mut mode) => mode.select_previous(),
@@ -116,6 +124,7 @@ pub fn select_previous(app: &mut Application) -> Result {
 
 pub fn enable_insert(app: &mut Application) -> Result {
     match app.mode {
+        Mode::MRU(ref mut mode) => mode.set_insert_mode(true),
         Mode::Command(ref mut mode) => mode.set_insert_mode(true),
         Mode::Open(ref mut mode) => mode.set_insert_mode(true),
         Mode::Theme(ref mut mode) => mode.set_insert_mode(true),
@@ -128,6 +137,7 @@ pub fn enable_insert(app: &mut Application) -> Result {
 
 pub fn disable_insert(app: &mut Application) -> Result {
     match app.mode {
+        Mode::MRU(ref mut mode) => mode.set_insert_mode(false),
         Mode::Command(ref mut mode) => mode.set_insert_mode(false),
         Mode::Open(ref mut mode) => mode.set_insert_mode(false),
         Mode::Theme(ref mut mode) => mode.set_insert_mode(false),
@@ -141,6 +151,7 @@ pub fn disable_insert(app: &mut Application) -> Result {
 pub fn push_search_char(app: &mut Application) -> Result {
     if let Some(Key::Char(c)) = *app.view.last_key() {
         match app.mode {
+            Mode::MRU(ref mut mode) => mode.push_search_char(c),
             Mode::Command(ref mut mode) => mode.push_search_char(c),
             Mode::Open(ref mut mode) => mode.push_search_char(c),
             Mode::Theme(ref mut mode) => mode.push_search_char(c),
@@ -154,6 +165,7 @@ pub fn push_search_char(app: &mut Application) -> Result {
 
 pub fn pop_search_token(app: &mut Application) -> Result {
     match app.mode {
+        Mode::MRU(ref mut mode) => mode.pop_search_token(),
         Mode::Command(ref mut mode) => mode.pop_search_token(),
         Mode::Open(ref mut mode) => mode.pop_search_token(),
         Mode::Theme(ref mut mode) => mode.pop_search_token(),
@@ -167,6 +179,7 @@ pub fn pop_search_token(app: &mut Application) -> Result {
 
 pub fn step_back(app: &mut Application) -> Result {
     let selection_available = match app.mode {
+        Mode::MRU(ref mut mode) => mode.results().count() > 0 && !mode.query().is_empty(),
         Mode::Command(ref mut mode) => mode.results().count() > 0 && !mode.query().is_empty(),
         Mode::Open(ref mut mode) => mode.results().count() > 0 && !mode.query().is_empty(),
         Mode::Theme(ref mut mode) => mode.results().count() > 0 && !mode.query().is_empty(),
