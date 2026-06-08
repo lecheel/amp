@@ -191,14 +191,6 @@ impl OpenMode {
             &self.results
         }
     }
-
-    fn collection_mut(&mut self) -> &mut SelectableVec<DisplayablePath> {
-        if self.input.is_empty() && self.buffers.len() > 1 {
-            &mut self.buffers
-        } else {
-            &mut self.results
-        }
-    }
 }
 
 impl fmt::Display for OpenMode {

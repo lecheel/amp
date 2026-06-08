@@ -15,7 +15,9 @@ pub struct SymbolJumpMode {
     insert: bool,
     input: String,
     symbols: Vec<Symbol>,
-    results: SelectableVec<Symbol>,
+    all_results: Vec<Symbol>, // ALL matches from search (not truncated)
+    scroll_offset: usize,     // index into all_results of first visible item
+    results: SelectableVec<Symbol>, // visible window only
     config: SearchSelectConfig,
 }
 
@@ -57,6 +59,8 @@ impl SymbolJumpMode {
             insert: true,
             input: String::new(),
             symbols: Vec::new(),
+            all_results: Vec::new(),
+            scroll_offset: 0,
             results: SelectableVec::new(Vec::new()),
             config,
         })
@@ -66,10 +70,24 @@ impl SymbolJumpMode {
         self.insert = true;
         self.input.clear();
         self.symbols = symbols(tokens.iter().context(BUFFER_PARSE_FAILED)?);
+        self.all_results = Vec::new();
+        self.scroll_offset = 0;
         self.results = SelectableVec::new(Vec::new());
         self.config = config;
 
         Ok(())
+    }
+
+    /// Recompute the visible window from all_results[scroll_offset..]
+    /// and set the cursor to `cursor_index` within the visible window.
+    fn update_visible_results(&mut self, cursor_index: usize) {
+        let max = self.config.max_results;
+        let end = (self.scroll_offset + max).min(self.all_results.len());
+        let visible: Vec<Symbol> = self.all_results[self.scroll_offset..end].to_vec();
+        self.results = SelectableVec::new(visible);
+        if !self.results.is_empty() {
+            self.results.set_selected_index(cursor_index).ok();
+        }
     }
 }
 
@@ -83,21 +101,18 @@ impl SearchSelectMode for SymbolJumpMode {
     type Item = Symbol;
 
     fn search(&mut self) {
-        // Find the symbols we're looking for using the query.
-        let results = if self.input.is_empty() {
-            self.symbols
-                .iter()
-                .take(self.config.max_results)
-                .cloned()
-                .collect()
+        // Filter symbols into all_results (no truncation)
+        if self.input.is_empty() {
+            self.all_results = self.symbols.clone();
         } else {
-            fragment::matching::find(&self.input, &self.symbols, self.config.max_results)
+            self.all_results = fragment::matching::find(&self.input, &self.symbols, usize::MAX)
                 .into_iter()
                 .map(|i| i.clone())
-                .collect()
-        };
+                .collect();
+        }
 
-        self.results = SelectableVec::new(results);
+        self.scroll_offset = 0;
+        self.update_visible_results(0);
     }
 
     fn query(&mut self) -> &mut String {
@@ -125,11 +140,31 @@ impl SearchSelectMode for SymbolJumpMode {
     }
 
     fn select_previous(&mut self) {
-        self.results.select_previous();
+        if self.results.selected_index() == 0 {
+            // At top of visible window — scroll up if possible
+            if self.scroll_offset > 0 {
+                self.scroll_offset -= 1;
+                self.update_visible_results(0);
+            }
+        } else {
+            self.results.select_previous();
+        }
     }
 
     fn select_next(&mut self) {
-        self.results.select_next();
+        let visible_len = self.results.len();
+        if visible_len == 0 {
+            return;
+        }
+        if self.results.selected_index() >= visible_len - 1 {
+            // At bottom of visible window — scroll down if possible
+            if self.scroll_offset + self.config.max_results < self.all_results.len() {
+                self.scroll_offset += 1;
+                self.update_visible_results(visible_len - 1);
+            }
+        } else {
+            self.results.select_next();
+        }
     }
 
     fn config(&self) -> &SearchSelectConfig {
@@ -229,5 +264,32 @@ mod tests {
         assert_eq!(mode.query(), "");
         assert_eq!(mode.insert_mode(), true);
         assert_eq!(mode.results().len(), 0);
+    }
+
+    #[test]
+    fn scrolling_through_results() {
+        let config = SearchSelectConfig { max_results: 2 };
+        let mut mode = SymbolJumpMode::new(config).unwrap();
+        let mut app = Application::new(&[]).unwrap();
+
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(file!());
+        app.workspace.open_buffer(&path).unwrap();
+        let token_set = app.workspace.current_buffer_tokens().unwrap();
+
+        mode.reset(&token_set, SearchSelectConfig { max_results: 2 })
+            .unwrap();
+        mode.search();
+
+        // Should have all results in all_results, only 2 visible
+        let total = mode.all_results.len();
+        if total > 2 {
+            // Can scroll down
+            mode.select_next();
+            mode.select_next(); // hit bottom of visible window, should scroll
+            assert_eq!(mode.scroll_offset, 1);
+            // Can scroll back up
+            mode.select_previous(); // hit top of visible window, should scroll
+            assert_eq!(mode.scroll_offset, 0);
+        }
     }
 }
