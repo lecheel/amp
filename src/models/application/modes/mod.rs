@@ -1,6 +1,7 @@
 mod command;
 mod confirm;
 mod ex;
+pub mod fd;
 pub mod jump;
 mod line_jump;
 mod mru;
@@ -15,6 +16,7 @@ mod syntax;
 mod theme;
 
 pub use self::ex::ExMode;
+pub use self::fd::FdMode;
 pub use self::mru::MRUMode;
 use std::fmt;
 
@@ -22,6 +24,7 @@ pub enum Mode {
     Command(CommandMode),
     Confirm(ConfirmMode),
     Exit,
+    Fd(FdMode),
     Insert,
     Jump(JumpMode),
     LineJump(LineJumpMode),
@@ -50,6 +53,7 @@ pub enum ModeKey {
     Command,
     Confirm,
     Exit,
+    Fd,
     Insert,
     Jump,
     LineJump,

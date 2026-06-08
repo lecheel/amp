@@ -9,6 +9,7 @@ pub mod completion;
 pub mod confirm;
 pub mod cursor;
 pub mod ex;
+pub mod fd;
 pub mod git;
 pub mod jump;
 pub mod line_jump;
@@ -50,6 +51,8 @@ pub fn hash_map() -> HashMap<&'static str, Command> {
     map.insert("ex::navigate_left", ex::navigate_left);
     map.insert("ex::navigate_right", ex::navigate_right);
     map.insert("git::revert_hunk", git::revert_hunk);
+    map.insert("fd::switch_to_fd_mode", fd::switch_to_fd_mode_no_filter);
+    map.insert("fd::accept", fd::accept);
     map.insert(
         "completion::complete_from_buffer",
         completion::complete_from_buffer,

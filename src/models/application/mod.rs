@@ -271,6 +271,12 @@ impl Application {
                 &mut self.view,
                 &self.error,
             ),
+            Mode::Fd(ref mut mode) => presenters::modes::fd::display(
+                &mut self.workspace,
+                mode,
+                &mut self.view,
+                &self.error,
+            ),
             Mode::Insert => {
                 presenters::modes::insert::display(&mut self.workspace, &mut self.view, &self.error)
             }
@@ -476,6 +482,13 @@ impl Application {
                     Some("search_select")
                 }
             }
+            Mode::Fd(ref mode) => {
+                if mode.insert_mode() {
+                    Some("search_select_insert")
+                } else {
+                    Some("search_select")
+                }
+            }
             Mode::Open(ref mode) => {
                 if mode.insert_mode() {
                     Some("search_select_insert")
@@ -585,6 +598,12 @@ impl Application {
         self.modes.insert(
             ModeKey::MRU,
             Mode::MRU(MRUMode::new(
+                self.preferences.borrow().search_select_config(),
+            )),
+        );
+        self.modes.insert(
+            ModeKey::Fd,
+            Mode::Fd(FdMode::new(
                 self.preferences.borrow().search_select_config(),
             )),
         );
