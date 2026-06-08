@@ -540,3 +540,104 @@ mod tests {
         assert!(result.is_err());
     }
 }
+
+pub fn match_bracket(app: &mut Application) -> Result {
+    if let Some(buffer) = app.workspace.current_buffer.as_mut() {
+        let data = buffer.data();
+        let position = find_matching_bracket(&data, buffer.cursor.line, buffer.cursor.offset)
+            .context("No matching bracket found")?;
+        buffer.cursor.move_to(position);
+    } else {
+        bail!(BUFFER_MISSING);
+    }
+    commands::view::scroll_to_cursor(app).context(SCROLL_TO_CURSOR_FAILED)
+}
+
+fn find_matching_bracket(data: &str, start_line: usize, start_offset: usize) -> Option<Position> {
+    // Build a flat index of all characters with their positions
+    let mut all_chars: Vec<(char, Position)> = Vec::new();
+    for (line_idx, line) in data.lines().enumerate() {
+        for (offset, ch) in line.chars().enumerate() {
+            all_chars.push((
+                ch,
+                Position {
+                    line: line_idx,
+                    offset,
+                },
+            ));
+        }
+    }
+
+    // Find the flat index of the first character at or after the cursor
+    let cursor_flat_idx = all_chars
+        .iter()
+        .position(|(_, pos)| pos.line == start_line && pos.offset >= start_offset)
+        .unwrap_or(all_chars.len());
+
+    // Search forward on the current line for a bracket character (Vim % behaviour)
+    let mut bracket_idx = None;
+    for i in cursor_flat_idx..all_chars.len() {
+        let (ch, pos) = &all_chars[i];
+        if pos.line > start_line {
+            break; // don't look past the current line for the initial bracket
+        }
+        if is_bracket(*ch) {
+            bracket_idx = Some(i);
+            break;
+        }
+    }
+
+    let bracket_idx = bracket_idx?;
+    let bracket_char = all_chars[bracket_idx].0;
+
+    let (open, close, forward) = bracket_pair(bracket_char)?;
+
+    let mut depth = 1;
+
+    if forward {
+        for i in (bracket_idx + 1)..all_chars.len() {
+            match all_chars[i].0 {
+                c if c == open => depth += 1,
+                c if c == close => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(all_chars[i].1);
+                    }
+                }
+                _ => {}
+            }
+        }
+    } else {
+        for i in (0..bracket_idx).rev() {
+            match all_chars[i].0 {
+                c if c == close => depth += 1,
+                c if c == open => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(all_chars[i].1);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    None
+}
+
+/// Returns (opening_bracket, closing_bracket, search_forward) for a given bracket.
+fn bracket_pair(ch: char) -> Option<(char, char, bool)> {
+    match ch {
+        '(' => Some(('(', ')', true)),
+        ')' => Some(('(', ')', false)),
+        '[' => Some(('[', ']', true)),
+        ']' => Some(('[', ']', false)),
+        '{' => Some(('{', '}', true)),
+        '}' => Some(('{', '}', false)),
+        _ => None,
+    }
+}
+
+fn is_bracket(ch: char) -> bool {
+    bracket_pair(ch).is_some()
+}
