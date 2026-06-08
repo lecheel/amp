@@ -1104,6 +1104,12 @@ pub fn ensure_trailing_newline(app: &mut Application) -> Result {
 }
 
 pub fn insert_tab(app: &mut Application) -> Result {
+    // If completion ghost text is showing, Tab is handled by completion::accept,
+    // so we must not also insert a tab here.
+    if app.view.completion.is_some() {
+        return Ok(());
+    }
+
     let buffer = app
         .workspace
         .current_buffer
@@ -1112,12 +1118,9 @@ pub fn insert_tab(app: &mut Application) -> Result {
     let tab_content = app.preferences.borrow().tab_content(buffer.path.as_ref());
     let tab_content_width = tab_content.chars().count();
     buffer.insert(tab_content);
-
-    // Move the cursor to the end of the inserted content.
     for _ in 0..tab_content_width {
         buffer.cursor.move_right();
     }
-
     Ok(())
 }
 
