@@ -28,8 +28,10 @@ pub struct OpenMode {
     pinned_input: String,
     index: OpenModeIndex,
     buffers: SelectableVec<DisplayablePath>,
+    all_results: Vec<DisplayablePath>,
+    scroll_offset: usize,
     pub results: SelectableVec<DisplayablePath>,
-    marked_results: HashSet<usize>,
+    marked_results: HashSet<usize>, // indices into all_results
     config: SearchSelectConfig,
 }
 
@@ -41,6 +43,8 @@ impl OpenMode {
             pinned_input: String::new(),
             index: OpenModeIndex::Indexing(path),
             buffers: SelectableVec::new(Vec::new()),
+            all_results: Vec::new(),
+            scroll_offset: 0,
             results: SelectableVec::new(Vec::new()),
             marked_results: HashSet::new(),
             config,
@@ -68,7 +72,6 @@ impl OpenMode {
                 .into_iter()
                 .map(|p| {
                     let path = p.unwrap_or(Path::new("untitled"));
-
                     DisplayablePath(path.into())
                 })
                 .collect(),
@@ -76,10 +79,11 @@ impl OpenMode {
         if let Some(i) = workspace.current_buffer_index() {
             self.buffers.set_selected_index(i)?;
         }
+        self.all_results = Vec::new();
+        self.scroll_offset = 0;
         self.results = SelectableVec::new(Vec::new());
         self.marked_results = HashSet::new();
 
-        // Build and populate the index in a separate thread.
         let path = workspace.path.clone();
         thread::spawn(move || {
             let mut index = Index::new(path);
@@ -95,15 +99,12 @@ impl OpenMode {
     }
 
     pub fn pin_query(&mut self) {
-        // Normalize whitespace between tokens
         for token in self.input.split_whitespace() {
             if !self.pinned_input.is_empty() {
                 self.pinned_input.push(' ');
             }
-
             self.pinned_input.push_str(token);
         }
-
         self.input.truncate(0);
     }
 
@@ -112,9 +113,6 @@ impl OpenMode {
             if self.pinned_input.is_empty() {
                 return;
             }
-
-            // Find the last word boundary (transition to/from whitespace), using
-            // using fold to carry the previous character's type forward.
             let mut boundary_index = 0;
             self.pinned_input
                 .char_indices()
@@ -122,20 +120,19 @@ impl OpenMode {
                     if index > 0 && c.is_whitespace() != was_whitespace {
                         boundary_index = index - 1;
                     }
-
                     c.is_whitespace()
                 });
-
             self.pinned_input.truncate(boundary_index);
         } else {
-            // Call the default implementation
             PopSearchToken::pop_search_token(self);
         }
     }
 
     pub fn toggle_selection(&mut self) {
-        if self.marked_results.take(&self.selected_index()).is_none() {
-            self.marked_results.insert(self.selected_index());
+        // Store index into all_results, not visible window
+        let all_idx = self.scroll_offset + self.results.selected_index();
+        if self.marked_results.take(&all_idx).is_none() {
+            self.marked_results.insert(all_idx);
         }
     }
 
@@ -143,22 +140,48 @@ impl OpenMode {
         if self.selection().is_none() {
             return Vec::new();
         }
-
         let mut selections: Vec<&DisplayablePath> = self
             .marked_results
             .iter()
-            .map(|i| self.results.get(*i).unwrap())
+            .filter_map(|i| self.all_results.get(*i))
             .collect();
-        selections.push(self.selection().unwrap());
-
+        if let Some(sel) = self.selection() {
+            selections.push(sel);
+        }
         selections
     }
 
     pub fn selected_indices(&self) -> Vec<usize> {
-        let mut selected_indices: Vec<usize> = self.marked_results.iter().copied().collect();
-        selected_indices.push(self.selected_index());
+        // Convert all_results indices to visible-window indices for the presenter
+        let visible_marked: Vec<usize> = self
+            .marked_results
+            .iter()
+            .filter_map(|&i| {
+                if i >= self.scroll_offset {
+                    let visible = i - self.scroll_offset;
+                    if visible < self.results.len() {
+                        Some(visible)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let mut result = visible_marked;
+        result.push(self.selected_index());
+        result
+    }
 
-        selected_indices
+    fn update_visible_results(&mut self, cursor_index: usize) {
+        let max = self.config.max_results;
+        let end = (self.scroll_offset + max).min(self.all_results.len());
+        let visible: Vec<DisplayablePath> = self.all_results[self.scroll_offset..end].to_vec();
+        self.results = SelectableVec::new(visible);
+        if !self.results.is_empty() {
+            self.results.set_selected_index(cursor_index).ok();
+        }
     }
 
     fn collection(&self) -> &SelectableVec<DisplayablePath> {
@@ -188,11 +211,11 @@ impl SearchSelectMode for OpenMode {
     type Item = DisplayablePath;
 
     fn search(&mut self) {
-        let results = if let OpenModeIndex::Complete(ref index) = self.index {
+        // Request ALL matching results (no truncation) for scrolling
+        let all: Vec<DisplayablePath> = if let OpenModeIndex::Complete(ref index) = self.index {
             if self.input.is_empty() && self.pinned_input.is_empty() {
                 index
                     .iter()
-                    .take(self.config.max_results)
                     .map(|path| DisplayablePath(path.to_path_buf()))
                     .collect()
             } else {
@@ -203,7 +226,7 @@ impl SearchSelectMode for OpenMode {
                             self.pinned_input.to_lowercase(),
                             self.input.to_lowercase()
                         ),
-                        self.config.max_results,
+                        usize::MAX,
                     )
                     .into_iter()
                     .map(|path| DisplayablePath(path.to_path_buf()))
@@ -213,8 +236,10 @@ impl SearchSelectMode for OpenMode {
             vec![]
         };
 
-        self.results = SelectableVec::new(results);
+        self.all_results = all;
+        self.scroll_offset = 0;
         self.marked_results = HashSet::new();
+        self.update_visible_results(0);
     }
 
     fn query(&mut self) -> &mut String {
@@ -242,11 +267,43 @@ impl SearchSelectMode for OpenMode {
     }
 
     fn select_previous(&mut self) {
-        self.collection_mut().select_previous();
+        // Buffers mode: no scrolling (typically few items)
+        if self.input.is_empty() && self.buffers.len() > 1 {
+            self.buffers.select_previous();
+            return;
+        }
+
+        // Results mode: scroll when cursor hits top
+        if self.results.selected_index() == 0 {
+            if self.scroll_offset > 0 {
+                self.scroll_offset -= 1;
+                self.update_visible_results(0);
+            }
+        } else {
+            self.results.select_previous();
+        }
     }
 
     fn select_next(&mut self) {
-        self.collection_mut().select_next();
+        // Buffers mode: no scrolling
+        if self.input.is_empty() && self.buffers.len() > 1 {
+            self.buffers.select_next();
+            return;
+        }
+
+        // Results mode: scroll when cursor hits bottom
+        let visible_len = self.results.len();
+        if visible_len == 0 {
+            return;
+        }
+        if self.results.selected_index() >= visible_len - 1 {
+            if self.scroll_offset + self.config.max_results < self.all_results.len() {
+                self.scroll_offset += 1;
+                self.update_visible_results(visible_len - 1);
+            }
+        } else {
+            self.results.select_next();
+        }
     }
 
     fn config(&self) -> &SearchSelectConfig {
@@ -254,14 +311,13 @@ impl SearchSelectMode for OpenMode {
     }
 
     fn message(&mut self) -> Option<String> {
-        // Show open buffers in empty state if there are more than one
         if self.buffers.len() > 1 && self.query().is_empty() {
             return None;
         }
 
         if let OpenModeIndex::Indexing(ref path) = self.index {
             Some(format!("Indexing {}", path.to_string_lossy()))
-        } else if !self.query().is_empty() && self.results().count() == 0 {
+        } else if !self.query().is_empty() && self.all_results.is_empty() {
             Some(String::from("No matching entries found."))
         } else {
             None
@@ -288,7 +344,6 @@ mod tests {
         let mut mode = OpenMode::new(path.clone(), config.clone());
         let (sender, receiver) = channel();
 
-        // Populate the index
         mode.reset(&mut workspace, None, sender, config).unwrap();
         if let Ok(Event::OpenModeIndexComplete(index)) = receiver.recv() {
             mode.set_index(index);
@@ -352,7 +407,7 @@ mod tests {
         mode.pin_query();
 
         assert_eq!(mode.query(), "");
-        assert_eq!(mode.pinned_query(), "Cargo toml"); // space is intentional
+        assert_eq!(mode.pinned_query(), "Cargo toml");
     }
 
     #[test]
@@ -363,7 +418,6 @@ mod tests {
         let mut mode = OpenMode::new(path.clone(), config.clone());
         let (sender, receiver) = channel();
 
-        // Populate the index
         mode.reset(&mut workspace, None, sender, config).unwrap();
         if let Ok(Event::OpenModeIndexComplete(index)) = receiver.recv() {
             mode.set_index(index);
@@ -401,7 +455,6 @@ mod tests {
         let mut mode = OpenMode::new(path.clone(), config.clone());
         let (sender, receiver) = channel();
 
-        // Populate the index
         mode.reset(&mut workspace, None, sender, config).unwrap();
         if let Ok(Event::OpenModeIndexComplete(index)) = receiver.recv() {
             mode.set_index(index);
@@ -422,7 +475,6 @@ mod tests {
         let mut mode = OpenMode::new(path.clone(), config.clone());
         let (sender, receiver) = channel();
 
-        // Populate the index
         mode.reset(&mut workspace, None, sender, config).unwrap();
         if let Ok(Event::OpenModeIndexComplete(index)) = receiver.recv() {
             mode.set_index(index);
@@ -443,7 +495,6 @@ mod tests {
         let mut mode = OpenMode::new(path.clone(), config.clone());
         let (sender, receiver) = channel();
 
-        // Populate the index
         mode.reset(&mut workspace, None, sender, config).unwrap();
         if let Ok(Event::OpenModeIndexComplete(index)) = receiver.recv() {
             mode.set_index(index);
@@ -466,7 +517,6 @@ mod tests {
         let mut mode = OpenMode::new(path.clone(), config.clone());
         let (sender, receiver) = channel();
 
-        // Populate the index
         mode.reset(&mut workspace, None, sender, config).unwrap();
         if let Ok(Event::OpenModeIndexComplete(index)) = receiver.recv() {
             mode.set_index(index);
@@ -490,7 +540,6 @@ mod tests {
         let mut mode = OpenMode::new(path.clone(), config.clone());
         let (sender, receiver) = channel();
 
-        // Populate the index
         mode.reset(&mut workspace, None, sender, config).unwrap();
         if let Ok(Event::OpenModeIndexComplete(index)) = receiver.recv() {
             mode.set_index(index);
@@ -510,7 +559,6 @@ mod tests {
         let mut mode = OpenMode::new(path.clone(), config.clone());
         let (sender, receiver) = channel();
 
-        // Populate the index
         mode.reset(&mut workspace, None, sender, config).unwrap();
         if let Ok(Event::OpenModeIndexComplete(index)) = receiver.recv() {
             mode.set_index(index);
@@ -532,7 +580,6 @@ mod tests {
         let mut mode = OpenMode::new(path.clone(), config.clone());
         let (sender, receiver) = channel();
 
-        // Populate the index
         mode.reset(&mut workspace, None, sender, config).unwrap();
         if let Ok(Event::OpenModeIndexComplete(index)) = receiver.recv() {
             mode.set_index(index);
@@ -555,26 +602,21 @@ mod tests {
         let mut mode = OpenMode::new(path.clone(), config.clone());
         let (sender, receiver) = channel();
 
-        // Populate the index
         mode.reset(&mut workspace, None, sender.clone(), config.clone())
             .unwrap();
         if let Ok(Event::OpenModeIndexComplete(index)) = receiver.recv() {
             mode.set_index(index);
         }
 
-        // Produce results and mark one of them
         mode.query().push_str("Cargo");
         mode.search();
         mode.toggle_selection();
 
-        // Change the search results
         mode.query().push_str(".");
         mode.search();
 
-        // Ensure the previously-marked result isn't currently selected
         mode.select_next();
 
-        // Verify that the marked result isn't included
         assert_eq!(mode.selected_indices(), vec![1]);
     }
 
@@ -586,19 +628,16 @@ mod tests {
         let mut mode = OpenMode::new(path.clone(), config.clone());
         let (sender, receiver) = channel();
 
-        // Populate the index
         mode.reset(&mut workspace, None, sender.clone(), config.clone())
             .unwrap();
         if let Ok(Event::OpenModeIndexComplete(index)) = receiver.recv() {
             mode.set_index(index);
         }
 
-        // Produce results and mark one of them
         mode.query().push_str("Cargo");
         mode.search();
         mode.toggle_selection();
 
-        // Reset the mode and repopulate the index
         mode.reset(&mut workspace, None, sender, config).unwrap();
         if let Ok(Event::OpenModeIndexComplete(index)) = receiver.recv() {
             mode.set_index(index);
@@ -606,10 +645,8 @@ mod tests {
         mode.query().push_str("Cargo");
         mode.search();
 
-        // Ensure the previously-marked result isn't currently selected
         mode.select_next();
 
-        // Verify that the marked result isn't included
         assert_eq!(mode.selected_indices(), vec![1]);
     }
 
@@ -621,13 +658,11 @@ mod tests {
         let mut mode = OpenMode::new(path.clone(), config.clone());
         let (sender, _) = channel();
 
-        // Open buffers
         let path1 = Path::new("src/main.rs");
         let path2 = Path::new("src/lib.rs");
         workspace.open_buffer(&path1).unwrap();
         workspace.open_buffer(&path2).unwrap();
 
-        // Let the mode look-up the buffers
         mode.reset(&mut workspace, None, sender.clone(), config.clone())
             .unwrap();
 
@@ -648,13 +683,11 @@ mod tests {
         let mut mode = OpenMode::new(path.clone(), config.clone());
         let (sender, _) = channel();
 
-        // Open buffers
         let path1 = Path::new("src/main.rs");
         let path2 = Path::new("src/lib.rs");
         workspace.open_buffer(&path1).unwrap();
         workspace.open_buffer(&path2).unwrap();
 
-        // Let the mode look-up the buffers
         mode.reset(&mut workspace, None, sender.clone(), config.clone())
             .unwrap();
 
