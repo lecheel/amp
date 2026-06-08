@@ -1,4 +1,5 @@
 mod buffer_metadata;
+mod buffer_positions;
 mod clipboard;
 mod completion;
 mod event;
@@ -9,6 +10,7 @@ mod syntax_loader;
 
 // Published API
 pub use self::buffer_metadata::{BufferMetadata, BufferRegistry, BufferType};
+pub use self::buffer_positions::PositionMap;
 pub use self::clipboard::ClipboardContent;
 pub use self::completion::{CompletionOrigin, CompletionState};
 pub use self::event::Event;
@@ -21,6 +23,7 @@ use self::modes::*;
 use self::syntax_loader::SyntaxLoader;
 use crate::commands;
 use crate::errors::*;
+use crate::models::application::buffer_positions::BufferPosition;
 use crate::presenters;
 use crate::view::View;
 use git2::Repository;
@@ -34,6 +37,7 @@ use std::mem;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::time::SystemTime;
 use syntect::parsing::SyntaxSet;
 
 pub struct Application {
@@ -49,6 +53,7 @@ pub struct Application {
     current_mode: ModeKey,
     previous_mode: ModeKey,
     modes: HashMap<ModeKey, Mode>,
+    pub saved_buffer_positions: PositionMap,
 }
 
 impl Application {
@@ -58,6 +63,9 @@ impl Application {
         let (event_channel, events) = mpsc::channel();
         let mut view = View::new(preferences.clone(), event_channel.clone())?;
         let clipboard = Clipboard::new();
+
+        // Load saved buffer positions before creating the workspace
+        let saved_buffer_positions = buffer_positions::load().unwrap_or_default();
 
         // Set up a workspace in the current directory.
         let workspace = create_workspace(&mut view, &preferences.borrow(), args)?;
@@ -75,9 +83,11 @@ impl Application {
             preferences,
             event_channel,
             events,
+            saved_buffer_positions,
         };
 
         app.create_modes()?;
+        app.apply_saved_positions();
 
         Ok(app)
     }
@@ -94,10 +104,82 @@ impl Application {
             }
         }
 
+        self.save_buffer_positions()?;
         Ok(())
     }
 
-    // src/models/application/mod.rs — render()
+    /// Apply saved cursor positions to all currently open buffers.
+    fn apply_saved_positions(&mut self) {
+        if self.workspace.current_buffer.is_none() {
+            return;
+        }
+
+        let start_id = self.workspace.current_buffer.as_ref().map(|b| b.id);
+        let mut first = true;
+
+        loop {
+            if !first && self.workspace.current_buffer.as_ref().map(|b| b.id) == start_id {
+                break;
+            }
+            first = false;
+
+            if let Some(buf) = self.workspace.current_buffer.as_mut() {
+                if let Some(path) = buf.path.as_ref() {
+                    let path_str = path.to_string_lossy().to_string();
+                    // Extract .position from the BufferPosition struct
+                    if let Some(buf_pos) = self.saved_buffer_positions.get(&path_str) {
+                        let pos = buf_pos.position;
+                        let line = pos.line.min(buf.line_count().saturating_sub(1));
+                        let offset = pos
+                            .offset
+                            .min(buf.data().lines().nth(line).map(|l| l.len()).unwrap_or(0));
+                        buf.cursor.move_to(Position { line, offset });
+                    }
+                }
+            }
+
+            self.workspace.next_buffer();
+        }
+    }
+
+    /// Collect and save cursor positions for all open buffers.
+    /// Merges with previously saved positions so files that were
+    /// closed earlier in the session aren't lost.
+    pub fn save_buffer_positions(&mut self) -> Result<()> {
+        let mut map = buffer_positions::load().unwrap_or_default();
+
+        if self.workspace.current_buffer.is_some() {
+            let start_id = self.workspace.current_buffer.as_ref().map(|b| b.id);
+            let mut first = true;
+
+            loop {
+                if !first && self.workspace.current_buffer.as_ref().map(|b| b.id) == start_id {
+                    break;
+                }
+                first = false;
+
+                if let Some(buf) = self.workspace.current_buffer.as_ref() {
+                    if let Some(path) = buf.path.as_ref() {
+                        let path_str = path.to_string_lossy().to_string();
+                        if !path_str.starts_with('[') && !path_str.is_empty() {
+                            map.insert(
+                                path_str,
+                                BufferPosition {
+                                    position: *buf.cursor,
+                                    last_used: SystemTime::now(), // ← Record current time
+                                },
+                            );
+                        }
+                    }
+                }
+
+                self.workspace.next_buffer();
+            }
+        }
+
+        buffer_positions::save(&map)?;
+        Ok(())
+    }
 
     fn render(&mut self) -> Result<()> {
         self.view.gutter_statuses = self.compute_gutter_statuses();

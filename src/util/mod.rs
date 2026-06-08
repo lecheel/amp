@@ -64,15 +64,33 @@ pub fn open_buffer(path: &Path, app: &mut Application) -> Result<()> {
         .context("Couldn't open a buffer for the specified path.")?;
 
     let buffer = app.workspace.current_buffer.as_mut().unwrap();
-
-    // Only override the default syntax definition if the user provided
-    // a valid one in their preferences.
     if syntax_definition.is_some() {
         buffer.syntax_definition = syntax_definition;
     }
 
-    app.view.initialize_buffer(buffer)?;
+    // ── Restore saved cursor position ──
+    if let Some(path_str) = buffer
+        .path
+        .as_ref()
+        .map(|p| p.to_string_lossy().to_string())
+    {
+        // Extract .position from the BufferPosition struct
+        if let Some(buf_pos) = app.saved_buffer_positions.get(&path_str) {
+            let pos = buf_pos.position;
+            let line = pos.line.min(buffer.line_count().saturating_sub(1));
+            let offset = pos.offset.min(
+                buffer
+                    .data()
+                    .lines()
+                    .nth(line)
+                    .map(|l| l.len())
+                    .unwrap_or(0),
+            );
+            buffer.cursor.move_to(Position { line, offset });
+        }
+    }
 
+    app.view.initialize_buffer(buffer)?;
     Ok(())
 }
 

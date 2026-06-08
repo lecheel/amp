@@ -43,12 +43,13 @@ impl CompletionState {
 
     /// Scan `buffer_data` for words that extend `prefix`.
     /// Case-sensitive matching; returns at most 100 entries.
+    /// Requires a minimum prefix length of 3 to avoid flooding candidates.
     pub fn from_buffer_words(
         buffer_data: &str,
         prefix: &str,
         origin: CompletionOrigin,
     ) -> Option<Self> {
-        if prefix.is_empty() {
+        if prefix.chars().count() < 3 {
             return None;
         }
 
