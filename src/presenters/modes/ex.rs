@@ -23,6 +23,9 @@ pub fn display(
     view: &mut View,
     error: &Option<Error>,
 ) -> Result<()> {
+    // Clone before the mutable borrow from build_presenter.
+    let completion = view.completion.clone();
+
     let data = workspace
         .current_buffer
         .as_ref()
@@ -106,6 +109,17 @@ pub fn display(
                 );
             }
         }
+    }
+
+    // ── unified buffer-word completion popup ──
+    if let Some(ref completion) = completion {
+        let cursor_offset =
+            MODE_LABEL.graphemes(true).count() + format!(" {}", mode.input).graphemes(true).count();
+        let anchor = Position {
+            line: status_line_y,
+            offset: cursor_offset,
+        };
+        presenter.print_completion_popup(completion, anchor);
     }
 
     // Render status line

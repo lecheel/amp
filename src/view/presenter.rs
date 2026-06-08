@@ -1,4 +1,5 @@
 use crate::errors::*;
+use crate::models::application::CompletionState;
 use crate::view::buffer::{BufferRenderer, LexemeMapper};
 use crate::view::color::{ColorMap, Colors};
 use crate::view::style::Style;
@@ -305,6 +306,106 @@ impl<'p> Presenter<'p> {
     pub fn print_error_box_from_string(&mut self, title: &str, error: &str) {
         let lines: Vec<&str> = error.lines().collect();
         self.print_error_box(title, &lines);
+    }
+
+    /// Screen-space cursor position computed by the last `print_buffer` call.
+    pub fn cursor_screen_position(&self) -> Option<Position> {
+        self.cursor_position
+    }
+
+    /// Render the unified completion popup anchored at `anchor` (screen coords).
+    /// The popup appears above the anchor when space allows, otherwise below.
+    pub fn print_completion_popup(&mut self, completion: &CompletionState, anchor: Position) {
+        const COL_WIDTH: usize = 30;
+        const COLUMNS: usize = 4;
+        const MAX_ROWS: usize = 8;
+
+        let entries = &completion.entries;
+        if entries.is_empty() {
+            return;
+        }
+
+        let row_count = (entries.len() + COLUMNS - 1) / COLUMNS;
+        let visible_rows = row_count.min(MAX_ROWS);
+
+        let popup_start_y = if anchor.line >= visible_rows {
+            anchor.line - visible_rows
+        } else {
+            anchor.line + 1
+        };
+
+        let popup_bg = crate::view::RGBColor(0x2C, 0x2C, 0x2C);
+        let popup_fg = crate::view::RGBColor(0xAB, 0xB2, 0xBF);
+        let popup_sel_fg = crate::view::RGBColor(0xFF, 0xFF, 0xFF);
+        let popup_sel_bg = crate::view::RGBColor(0x4C, 0x78, 0xCC);
+
+        for row in 0..visible_rows {
+            // background for the whole row
+            let x_start = anchor.offset;
+            let row_width = COLUMNS * COL_WIDTH;
+            let clamped = row_width.min(self.width().saturating_sub(x_start));
+            self.print(
+                &Position {
+                    line: popup_start_y + row,
+                    offset: x_start,
+                },
+                Style::Default,
+                Colors::Custom(popup_fg, popup_bg),
+                " ".repeat(clamped),
+            );
+
+            for col in 0..COLUMNS {
+                let idx = row * COLUMNS + col;
+                if idx >= entries.len() {
+                    break;
+                }
+
+                let is_selected = idx == completion.selected_index;
+                let x = anchor.offset + col * COL_WIDTH;
+                let y = popup_start_y + row;
+
+                if y >= self.height() - 1 {
+                    break;
+                }
+
+                let (fg, bg) = if is_selected {
+                    (popup_sel_fg, popup_sel_bg)
+                } else {
+                    (popup_fg, popup_bg)
+                };
+
+                let inner = COL_WIDTH.saturating_sub(1);
+                let label =
+                    truncate_popup_graphemes(&entries[idx].display, inner.saturating_sub(1));
+                let glen = label.graphemes(true).count();
+                let pad = inner.saturating_sub(glen);
+                let cell = format!(" {}{}", label, " ".repeat(pad));
+
+                self.print(
+                    &Position { line: y, offset: x },
+                    if is_selected {
+                        Style::Bold
+                    } else {
+                        Style::Default
+                    },
+                    Colors::Custom(fg, bg),
+                    cell,
+                );
+            }
+        }
+    }
+}
+
+fn truncate_popup_graphemes(s: &str, max: usize) -> String {
+    let g: Vec<&str> = s.graphemes(true).collect();
+    if g.len() <= max {
+        s.to_string()
+    } else if max == 0 {
+        String::new()
+    } else {
+        let mut t: String = g[..max - 1].iter().copied().collect();
+        t.push('~');
+        t
     }
 }
 

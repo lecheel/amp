@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::path::Path;
 
 const COMPLETION_COLUMNS: usize = 4;
@@ -239,6 +240,60 @@ impl ExMode {
                 self.completions.clear();
                 self.completion_selection = None;
             }
+        }
+    }
+
+    /// Generate completions from words in the current buffer that match the
+    /// alphanumeric/underscore prefix at the end of the ex input line.
+    /// Uses the same `completions` / `completion_selection` fields as
+    /// command/file completions so the popup UI is unified.
+    pub fn generate_buffer_completions(&mut self, buffer_data: &str) {
+        let input = self.input.trim_start_matches(':');
+
+        // Walk backwards to find where the trailing "word" (alphanum + '_') starts.
+        let mut prefix_start = input.len();
+        for (i, c) in input.char_indices().rev() {
+            if c.is_alphanumeric() || c == '_' {
+                prefix_start = i;
+            } else {
+                break;
+            }
+        }
+
+        let prefix = &input[prefix_start..];
+
+        if prefix.is_empty() {
+            self.completions.clear();
+            self.completion_selection = None;
+            return;
+        }
+
+        let prefix_lower = prefix.to_lowercase();
+        let mut word_set = BTreeSet::new();
+
+        for line in buffer_data.lines() {
+            for word in line.split(|c: char| !c.is_alphanumeric() && c != '_') {
+                if word.len() > prefix.len() && word.to_lowercase().starts_with(&prefix_lower) {
+                    word_set.insert(word.to_string());
+                }
+            }
+        }
+
+        let before = &input[..prefix_start];
+
+        self.completions = word_set
+            .into_iter()
+            .take(100)
+            .map(|word| CompletionEntry {
+                display: word.clone(),
+                value: format!(":{}{}", before, word),
+            })
+            .collect();
+
+        if self.completions.is_empty() {
+            self.completion_selection = None;
+        } else {
+            self.completion_selection = Some(0);
         }
     }
 }

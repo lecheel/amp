@@ -21,6 +21,7 @@ use self::event_listener::EventListener;
 use self::theme_loader::ThemeLoader;
 use crate::errors::*;
 use crate::input::Key;
+use crate::models::application::CompletionState;
 use crate::models::application::{BufferRegistry, Event, GitGutterStatus, Preferences};
 use log::debug;
 use scribe::buffer::Buffer;
@@ -48,6 +49,7 @@ pub struct View {
     event_listener_killswitch: SyncSender<()>,
     pub gutter_statuses: Option<Vec<GitGutterStatus>>,
     pub buffer_registry: BufferRegistry,
+    pub completion: Option<CompletionState>,
 }
 
 impl View {
@@ -73,6 +75,7 @@ impl View {
             event_listener_killswitch: killswitch_tx,
             gutter_statuses: None,
             buffer_registry: BufferRegistry::default(),
+            completion: None,
         })
     }
 

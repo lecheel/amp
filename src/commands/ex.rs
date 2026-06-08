@@ -5,6 +5,7 @@ use crate::models::application::{Application, Mode};
 use std::path::{Path, PathBuf};
 
 pub fn push_char(app: &mut Application) -> Result {
+    app.view.completion = None;
     let key = app.view.last_key().as_ref().context("No key press")?;
     if let Key::Char(c) = *key {
         if let Mode::Ex(ref mut mode) = app.mode {
@@ -23,6 +24,7 @@ pub fn push_char(app: &mut Application) -> Result {
 }
 
 pub fn pop_char(app: &mut Application) -> Result {
+    app.view.completion = None;
     if let Mode::Ex(ref mut mode) = app.mode {
         mode.input.pop();
         mode.update_completions(&app.workspace.path);
@@ -200,6 +202,7 @@ pub fn next_history(app: &mut Application) -> Result {
 }
 
 pub fn complete(app: &mut Application) -> Result {
+    app.view.completion = None;
     if let Mode::Ex(ref mut mode) = app.mode {
         if mode.completions.is_empty() {
             mode.update_completions(&app.workspace.path);
@@ -254,5 +257,27 @@ fn walk_into_directory(app: &mut Application) -> Result {
             }
         }
     }
+    Ok(())
+}
+
+pub fn complete_from_buffer(app: &mut Application) -> Result {
+    let buffer_data = app
+        .workspace
+        .current_buffer
+        .as_ref()
+        .map(|b| b.data())
+        .unwrap_or_default();
+
+    if let Mode::Ex(ref mut mode) = app.mode {
+        mode.generate_buffer_completions(&buffer_data);
+
+        // Oneshot: single match → apply immediately, no popup needed.
+        if mode.completions.len() == 1 {
+            mode.apply_selection();
+        }
+    } else {
+        bail!("Can't complete from buffer outside of ex mode");
+    }
+
     Ok(())
 }

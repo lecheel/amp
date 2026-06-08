@@ -1,5 +1,6 @@
 mod buffer_metadata;
 mod clipboard;
+mod completion;
 mod event;
 pub mod git_gutter;
 pub mod modes;
@@ -9,6 +10,7 @@ mod syntax_loader;
 // Published API
 pub use self::buffer_metadata::{BufferMetadata, BufferRegistry, BufferType};
 pub use self::clipboard::ClipboardContent;
+pub use self::completion::{CompletionOrigin, CompletionState};
 pub use self::event::Event;
 pub use self::git_gutter::GitGutterStatus;
 pub use self::modes::{Mode, ModeKey};

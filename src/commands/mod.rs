@@ -5,6 +5,7 @@ pub mod alias;
 pub mod application;
 pub mod buffer;
 pub mod buffer_list;
+pub mod completion;
 pub mod confirm;
 pub mod cursor;
 pub mod ex;
@@ -47,6 +48,14 @@ pub fn hash_map() -> HashMap<&'static str, Command> {
     map.insert("ex::navigate_left", ex::navigate_left);
     map.insert("ex::navigate_right", ex::navigate_right);
     map.insert("git::revert_hunk", git::revert_hunk);
+    map.insert(
+        "completion::complete_from_buffer",
+        completion::complete_from_buffer,
+    );
+    map.insert("completion::select_next", completion::select_next);
+    map.insert("completion::select_previous", completion::select_previous);
+    map.insert("completion::accept", completion::accept);
+    map.insert("completion::cancel", completion::cancel);
     map.insert("ex::select_next_completion", ex::select_next_completion);
     map.insert(
         "ex::select_previous_completion",

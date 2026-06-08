@@ -12,22 +12,26 @@ use std::fs::{read_to_string, remove_file, File};
 use std::path::PathBuf;
 
 pub fn handle_input(app: &mut Application) -> Result {
+    // ── unified completion popup gets first crack ──
+    if app.view.completion.is_some() {
+        if crate::commands::completion::handle_key(app)? {
+            return Ok(());
+        }
+        // Key wasn't consumed → popup dismissed; fall through to mode keymap.
+    }
+
     let commands = app.view.last_key().as_ref().and_then(|key| {
         app.mode_str()
             .and_then(|mode| app.preferences.borrow().keymap().commands_for(mode, key))
     });
 
     if let Some(coms) = commands {
-        // Run all commands, stopping at the first error encountered, if any.
         for com in coms {
             debug!("running command");
-
             com(app)?;
-
             debug!("command completed successfully");
         }
     }
-
     Ok(())
 }
 
