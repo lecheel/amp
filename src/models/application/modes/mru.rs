@@ -8,6 +8,8 @@ pub struct MRUMode {
     insert: bool,
     input: String,
     paths: Vec<DisplayablePath>,
+    all_results: Vec<DisplayablePath>,
+    scroll_offset: usize,
     results: SelectableVec<DisplayablePath>,
     config: SearchSelectConfig,
 }
@@ -18,6 +20,8 @@ impl MRUMode {
             insert: true,
             input: String::new(),
             paths: Vec::new(),
+            all_results: Vec::new(),
+            scroll_offset: 0,
             results: SelectableVec::new(Vec::new()),
             config,
         }
@@ -27,8 +31,20 @@ impl MRUMode {
         self.input.clear();
         self.insert = true;
         self.paths = paths;
-        self.results = SelectableVec::new(self.paths.clone());
+        self.all_results = self.paths.clone();
+        self.scroll_offset = 0;
         self.config = config;
+        self.update_visible_results(0);
+    }
+
+    fn update_visible_results(&mut self, cursor_index: usize) {
+        let max = self.config.max_results;
+        let end = (self.scroll_offset + max).min(self.all_results.len());
+        let visible: Vec<DisplayablePath> = self.all_results[self.scroll_offset..end].to_vec();
+        self.results = SelectableVec::new(visible);
+        if !self.results.is_empty() {
+            self.results.set_selected_index(cursor_index).ok();
+        }
     }
 }
 
@@ -43,24 +59,19 @@ impl SearchSelectMode for MRUMode {
 
     fn search(&mut self) {
         if self.input.is_empty() {
-            self.results = SelectableVec::new(
-                self.paths
-                    .iter()
-                    .take(self.config.max_results)
-                    .cloned()
-                    .collect(),
-            );
+            self.all_results = self.paths.clone();
         } else {
             let query = self.input.to_lowercase();
-            let results: Vec<DisplayablePath> = self
+            self.all_results = self
                 .paths
                 .iter()
                 .filter(|p| p.0.to_string_lossy().to_lowercase().contains(&query))
-                .take(self.config.max_results)
                 .cloned()
                 .collect();
-            self.results = SelectableVec::new(results);
         }
+
+        self.scroll_offset = 0;
+        self.update_visible_results(0);
     }
 
     fn query(&mut self) -> &mut String {
@@ -88,11 +99,29 @@ impl SearchSelectMode for MRUMode {
     }
 
     fn select_previous(&mut self) {
-        self.results.select_previous();
+        if self.results.selected_index() == 0 {
+            if self.scroll_offset > 0 {
+                self.scroll_offset -= 1;
+                self.update_visible_results(0);
+            }
+        } else {
+            self.results.select_previous();
+        }
     }
 
     fn select_next(&mut self) {
-        self.results.select_next();
+        let visible_len = self.results.len();
+        if visible_len == 0 {
+            return;
+        }
+        if self.results.selected_index() >= visible_len - 1 {
+            if self.scroll_offset + self.config.max_results < self.all_results.len() {
+                self.scroll_offset += 1;
+                self.update_visible_results(visible_len - 1);
+            }
+        } else {
+            self.results.select_next();
+        }
     }
 
     fn config(&self) -> &SearchSelectConfig {

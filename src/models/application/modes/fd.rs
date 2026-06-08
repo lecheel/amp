@@ -9,8 +9,10 @@ use std::slice::Iter;
 pub struct FdMode {
     insert: bool,
     input: String,
-    paths: Vec<DisplayablePath>,
-    results: SelectableVec<DisplayablePath>,
+    paths: Vec<DisplayablePath>,             // ALL files from fd
+    all_results: Vec<DisplayablePath>,       // ALL matches from search (not truncated)
+    scroll_offset: usize,                    // index into all_results of first visible item
+    results: SelectableVec<DisplayablePath>, // visible window only
     config: SearchSelectConfig,
 }
 
@@ -20,6 +22,8 @@ impl FdMode {
             insert: true,
             input: String::new(),
             paths: Vec::new(),
+            all_results: Vec::new(),
+            scroll_offset: 0,
             results: SelectableVec::new(Vec::new()),
             config,
         }
@@ -29,9 +33,8 @@ impl FdMode {
         self.input.clear();
         self.insert = true;
         self.config = config;
+        self.scroll_offset = 0;
 
-        // Build fd command — pass filter as a positional pattern argument
-        // so fd does the initial filtering server-side for efficiency.
         let mut cmd = Command::new("fd");
         cmd.args(["--type", "f", "--follow"]);
 
@@ -40,28 +43,32 @@ impl FdMode {
         }
 
         self.paths = match cmd.current_dir(workspace_path).output() {
-            Ok(output) if output.status.success() => {
-                String::from_utf8_lossy(&output.stdout)
-                    .lines()
-                    .filter(|l| !l.is_empty())
-                    .map(|l| DisplayablePath(workspace_path.join(l))) // ← was PathBuf::from(l)
-                    .collect()
-            }
+            Ok(output) if output.status.success() => String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .filter(|l| !l.is_empty())
+                .map(|l| DisplayablePath(workspace_path.join(l)))
+                .collect(),
             _ => Vec::new(),
         };
 
-        // Pre-populate the query so the user can refine further
         if !filter.is_empty() {
             self.input.push_str(filter);
         }
 
-        self.results = SelectableVec::new(
-            self.paths
-                .iter()
-                .take(self.config.max_results)
-                .cloned()
-                .collect(),
-        );
+        self.all_results = self.paths.clone();
+        self.update_visible_results(0);
+    }
+
+    /// Recompute the visible window from all_results[scroll_offset..]
+    /// and set the cursor to `cursor_index` within the visible window.
+    fn update_visible_results(&mut self, cursor_index: usize) {
+        let max = self.config.max_results;
+        let end = (self.scroll_offset + max).min(self.all_results.len());
+        let visible: Vec<DisplayablePath> = self.all_results[self.scroll_offset..end].to_vec();
+        self.results = SelectableVec::new(visible);
+        if !self.results.is_empty() {
+            self.results.set_selected_index(cursor_index).ok();
+        }
     }
 }
 
@@ -75,25 +82,21 @@ impl SearchSelectMode for FdMode {
     type Item = DisplayablePath;
 
     fn search(&mut self) {
+        // Filter paths into all_results (no truncation)
         if self.input.is_empty() {
-            self.results = SelectableVec::new(
-                self.paths
-                    .iter()
-                    .take(self.config.max_results)
-                    .cloned()
-                    .collect(),
-            );
+            self.all_results = self.paths.clone();
         } else {
             let query = self.input.to_lowercase();
-            let results: Vec<DisplayablePath> = self
+            self.all_results = self
                 .paths
                 .iter()
                 .filter(|p| p.0.to_string_lossy().to_lowercase().contains(&query))
-                .take(self.config.max_results)
                 .cloned()
                 .collect();
-            self.results = SelectableVec::new(results);
         }
+
+        self.scroll_offset = 0;
+        self.update_visible_results(0);
     }
 
     fn query(&mut self) -> &mut String {
@@ -121,11 +124,31 @@ impl SearchSelectMode for FdMode {
     }
 
     fn select_previous(&mut self) {
-        self.results.select_previous();
+        if self.results.selected_index() == 0 {
+            // At top of visible window — scroll up if possible
+            if self.scroll_offset > 0 {
+                self.scroll_offset -= 1;
+                self.update_visible_results(0);
+            }
+        } else {
+            self.results.select_previous();
+        }
     }
 
     fn select_next(&mut self) {
-        self.results.select_next();
+        let visible_len = self.results.len();
+        if visible_len == 0 {
+            return;
+        }
+        if self.results.selected_index() >= visible_len - 1 {
+            // At bottom of visible window — scroll down if possible
+            if self.scroll_offset + self.config.max_results < self.all_results.len() {
+                self.scroll_offset += 1;
+                self.update_visible_results(visible_len - 1);
+            }
+        } else {
+            self.results.select_next();
+        }
     }
 
     fn config(&self) -> &SearchSelectConfig {
@@ -135,7 +158,7 @@ impl SearchSelectMode for FdMode {
     fn message(&mut self) -> Option<String> {
         if self.paths.is_empty() {
             Some(String::from("No files found (is 'fd' installed?)"))
-        } else if !self.query().is_empty() && self.results().count() == 0 {
+        } else if !self.query().is_empty() && self.all_results.is_empty() {
             Some(String::from("No matching entries found."))
         } else {
             None
