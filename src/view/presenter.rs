@@ -218,6 +218,202 @@ impl<'p> Presenter<'p> {
         );
     }
 
+    pub fn print_popup_box(&mut self, title: &str, lines: &[&str], accent: Colors) {
+        const MAX_CONTENT_LINES: usize = 8;
+        const HORIZONTAL_PAD: usize = 2;
+        const BORDER_WIDTH: usize = 1;
+
+        let mut visible: Vec<String> = Vec::new();
+        if !title.is_empty() {
+            visible.push(title.to_string());
+        }
+        visible.extend(lines.iter().take(MAX_CONTENT_LINES).map(|s| s.to_string()));
+        if lines.len() > MAX_CONTENT_LINES {
+            if let Some(last) = visible.last_mut() {
+                *last = format!("{}…", last.trim_end());
+            }
+        }
+        if visible.is_empty() {
+            return;
+        }
+
+        let box_w = std::cmp::max((self.width() as f32 * 0.9).ceil() as usize, 20);
+        let inner_w = box_w
+            .saturating_sub(2 * BORDER_WIDTH)
+            .saturating_sub(2 * HORIZONTAL_PAD);
+
+        for line in &mut visible {
+            let g: Vec<&str> = line.graphemes(true).collect();
+            if g.len() > inner_w {
+                *line = format!("{}…", g[..inner_w.saturating_sub(1)].join(""));
+            }
+        }
+
+        let box_h = visible.len() + 2;
+        let bottom_row = self.height().saturating_sub(2);
+        let row0 = bottom_row.saturating_sub(box_h.saturating_sub(1));
+        let col0 = self.width().saturating_sub(box_w) / 2;
+
+        let border_fg = crate::view::RGBColor(0x58, 0x5C, 0x6E);
+        let dark_bg = crate::view::RGBColor(0x1E, 0x1E, 0x2E);
+        let light_fg = crate::view::RGBColor(0xC0, 0xCA, 0xF5);
+
+        let title_fg = match accent {
+            Colors::Warning => crate::view::RGBColor(0xF3, 0x8B, 0xA8),
+            Colors::Insert => crate::view::RGBColor(0xA6, 0xE3, 0xA1),
+            Colors::SelectMode => crate::view::RGBColor(0x89, 0xB4, 0xFA),
+            Colors::Custom(fg, _) | Colors::CustomForeground(fg) => fg,
+            _ => light_fg,
+        };
+
+        let border_colors = Colors::Custom(border_fg, dark_bg);
+        let text_colors = Colors::Custom(light_fg, dark_bg);
+        let title_colors = Colors::Custom(title_fg, dark_bg);
+        let is_title_row = !title.is_empty();
+
+        // Top border: +---...---+
+        self.print(
+            &Position {
+                line: row0,
+                offset: col0,
+            },
+            Style::Default,
+            border_colors,
+            "+",
+        );
+        for c in 1..box_w.saturating_sub(1) {
+            self.print(
+                &Position {
+                    line: row0,
+                    offset: col0 + c,
+                },
+                Style::Default,
+                border_colors,
+                "-",
+            );
+        }
+        self.print(
+            &Position {
+                line: row0,
+                offset: col0 + box_w - 1,
+            },
+            Style::Default,
+            border_colors,
+            "+",
+        );
+
+        // Content rows: | text |
+        for (i, line) in visible.iter().enumerate() {
+            let row = row0 + 1 + i;
+
+            self.print(
+                &Position {
+                    line: row,
+                    offset: col0,
+                },
+                Style::Default,
+                border_colors,
+                "|",
+            );
+
+            for c in 0..box_w.saturating_sub(2) {
+                self.print(
+                    &Position {
+                        line: row,
+                        offset: col0 + 1 + c,
+                    },
+                    Style::Default,
+                    text_colors,
+                    " ",
+                );
+            }
+
+            let colors_for_row = if is_title_row && i == 0 {
+                title_colors
+            } else {
+                text_colors
+            };
+            let style_for_row = if is_title_row && i == 0 {
+                Style::Bold
+            } else {
+                Style::Default
+            };
+            for (gi, grapheme) in line.graphemes(true).enumerate() {
+                if gi >= inner_w {
+                    break;
+                }
+                self.print(
+                    &Position {
+                        line: row,
+                        offset: col0 + BORDER_WIDTH + HORIZONTAL_PAD + gi,
+                    },
+                    style_for_row,
+                    colors_for_row,
+                    grapheme.to_string(),
+                );
+            }
+
+            self.print(
+                &Position {
+                    line: row,
+                    offset: col0 + box_w - 1,
+                },
+                Style::Default,
+                border_colors,
+                "|",
+            );
+        }
+
+        // Bottom border: +---...---+
+        let last_row = row0 + box_h - 1;
+        self.print(
+            &Position {
+                line: last_row,
+                offset: col0,
+            },
+            Style::Default,
+            border_colors,
+            "+",
+        );
+        for c in 1..box_w.saturating_sub(1) {
+            self.print(
+                &Position {
+                    line: last_row,
+                    offset: col0 + c,
+                },
+                Style::Default,
+                border_colors,
+                "-",
+            );
+        }
+        self.print(
+            &Position {
+                line: last_row,
+                offset: col0 + box_w - 1,
+            },
+            Style::Default,
+            border_colors,
+            "+",
+        );
+    }
+
+    pub fn print_error_popup(&mut self, title: &str, lines: &[&str]) {
+        self.print_popup_box(title, lines, Colors::Warning);
+    }
+
+    pub fn print_info_popup(&mut self, title: &str, lines: &[&str]) {
+        self.print_popup_box(title, lines, Colors::SelectMode);
+    }
+
+    pub fn print_success_popup(&mut self, title: &str, lines: &[&str]) {
+        self.print_popup_box(title, lines, Colors::Insert);
+    }
+
+    pub fn print_error_popup_from_string(&mut self, title: &str, error: &str) {
+        let lines: Vec<&str> = error.lines().collect();
+        self.print_error_popup(title, &lines);
+    }
+
     pub fn print_messages_box(&mut self, title: &str, lines: &[&str], _accent: Colors) {
         const MAX_LINES: usize = 8;
         let mut visible: Vec<String> = Vec::new();
