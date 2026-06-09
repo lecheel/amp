@@ -18,4 +18,5 @@ pub mod pending_yank;
 pub mod search;
 pub mod search_select;
 pub mod select;
+pub mod select_block;
 pub mod select_line;

@@ -271,6 +271,18 @@ impl Application {
                 &mut self.view,
                 &self.error,
             ),
+            Mode::SelectBlock(ref mode) => presenters::modes::select_block::display_select_block(
+                &mut self.workspace,
+                mode,
+                &mut self.view,
+                &self.error,
+            ),
+            Mode::BlockInsert(ref mode) => presenters::modes::select_block::display_block_insert(
+                &mut self.workspace,
+                mode,
+                &mut self.view,
+                &self.error,
+            ),
             Mode::MRU(ref mut mode) => presenters::modes::search_select::display(
                 &mut self.workspace,
                 mode,
@@ -495,6 +507,8 @@ impl Application {
                     Some("search_select")
                 }
             }
+            Mode::SelectBlock(_) => Some("select_block"),
+            Mode::BlockInsert(_) => Some("block_insert"),
             Mode::Fd(ref mode) => {
                 if mode.insert_mode() {
                     Some("search_select_insert")
@@ -589,6 +603,14 @@ impl Application {
             Mode::FilePicker(FilePickerMode::new(
                 self.preferences.borrow().search_select_config(),
             )),
+        );
+        self.modes.insert(
+            ModeKey::SelectBlock,
+            Mode::SelectBlock(SelectBlockMode::new(Position::default())),
+        );
+        self.modes.insert(
+            ModeKey::BlockInsert,
+            Mode::BlockInsert(BlockInsertMode::new()),
         );
         self.modes.insert(
             ModeKey::Leader,

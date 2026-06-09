@@ -36,6 +36,7 @@ normal:
   f: application::switch_to_second_stage_jump_mode
   v: application::switch_to_select_mode
   V: application::switch_to_select_line_mode
+  ctrl-v: select_block::switch_to_select_block_mode
   g: application::switch_to_line_jump_mode
   t: application::switch_to_theme_mode
   u: buffer::undo
@@ -103,62 +104,50 @@ ex:
   ctrl-n: ex::select_next_completion
   ctrl-p: ex::select_previous_completion  
 
-# Operator-pending modes: d/y/c waits for a motion or repeated operator
-
 pending_delete:
   $:
     - buffer::delete_rest_of_line
     - application::switch_to_normal_mode
-  # dd: delete current line
   d:
     - buffer::delete_current_line
     - application::switch_to_normal_mode
-  # dw: delete token
   w:
     - buffer::delete_token
     - application::switch_to_normal_mode
-  # dj: delete current line and line below
   j:
     - application::switch_to_select_line_mode
     - cursor::move_down
     - selection::copy_and_delete
     - application::switch_to_normal_mode
     - view::scroll_to_cursor
-  # dk: delete current line and line above
   k:
     - application::switch_to_select_line_mode
     - cursor::move_up
     - selection::copy_and_delete
     - application::switch_to_normal_mode
     - view::scroll_to_cursor
-  # d$: delete to end of line
   L:
     - buffer::delete_rest_of_line
     - application::switch_to_normal_mode
   escape: application::switch_to_normal_mode
-  # Any unrecognized key cancels and re-processes in normal mode
   _:
     - application::switch_to_normal_mode
     - application::handle_input
 
 pending_yank:
-  # yy: copy current line
   y:
     - buffer::copy_current_line
     - application::switch_to_normal_mode
     - view::scroll_to_cursor
-  # yw: copy token
   w:
     - buffer::copy_token
     - application::switch_to_normal_mode
-  # yj: copy current line and line below
   j:
     - application::switch_to_select_line_mode
     - cursor::move_down
     - selection::copy
     - application::switch_to_normal_mode
     - view::scroll_to_cursor
-  # yk: copy current line and line above
   k:
     - application::switch_to_select_line_mode
     - cursor::move_up
@@ -171,15 +160,12 @@ pending_yank:
     - application::handle_input
 
 pending_change:
-  # cc: change current line
   c:
     - buffer::change_current_line
     - application::switch_to_normal_mode
-  # cw: change token
   w:
     - buffer::change_token
     - application::switch_to_normal_mode
-  # c$: change to end of line
   L:
     - buffer::change_rest_of_line
     - application::switch_to_normal_mode
@@ -189,11 +175,9 @@ pending_change:
     - application::handle_input
 
 pending_left_bracket:
-  # [[ : toggle line comment (preserving original [ binding)
   "[":
     - buffer::toggle_line_comment
     - application::switch_to_normal_mode
-  # [h : move to previous git hunk
   h:
     - cursor::move_to_previous_hunk
     - application::switch_to_normal_mode
@@ -203,11 +187,9 @@ pending_left_bracket:
     - application::handle_input
 
 pending_right_bracket:
-  # ]] : indent line (alternative to >)
   "]":
     - buffer::indent_line
     - application::switch_to_normal_mode
-  # ]h : move to next git hunk
   h:
     - cursor::move_to_next_hunk
     - application::switch_to_normal_mode
@@ -398,6 +380,8 @@ select:
   ",": view::scroll_up
   page_up: view::scroll_up
   page_down: view::scroll_down
+  V: application::switch_to_select_line_mode
+  ctrl-v: select_block::switch_to_select_block_mode
   escape: application::switch_to_normal_mode
   ctrl-a: selection::select_all
   ctrl-z: application::suspend
@@ -452,8 +436,51 @@ select_line:
   "[": buffer::toggle_line_comment
   page_up: view::scroll_up
   page_down: view::scroll_down
+  v: application::switch_to_select_mode
+  ctrl-v: select_block::switch_to_select_block_mode
   escape: application::switch_to_normal_mode
   ctrl-a: selection::select_all
+  ctrl-z: application::suspend
+  ctrl-c: application::exit
+
+select_block:
+  up: cursor::move_up
+  down: cursor::move_down
+  left: cursor::move_left
+  right: cursor::move_right
+  j: cursor::move_down
+  k: cursor::move_up
+  h: cursor::move_left
+  l: cursor::move_right
+  H: cursor::move_to_start_of_line
+  L: cursor::move_to_end_of_line
+  home: cursor::move_to_start_of_line
+  end: cursor::move_to_end_of_line
+  I: select_block::block_insert
+  A: select_block::block_append
+  d:
+    - select_block::copy_and_delete
+    - application::switch_to_normal_mode
+    - view::scroll_to_cursor
+  delete:
+    - select_block::copy_and_delete
+    - application::switch_to_normal_mode
+    - view::scroll_to_cursor
+  y: select_block::copy
+  c: select_block::change
+  v: application::switch_to_select_mode
+  V: application::switch_to_select_line_mode
+  page_up: view::scroll_up
+  page_down: view::scroll_down
+  escape: application::switch_to_normal_mode
+  ctrl-z: application::suspend
+  ctrl-c: application::exit
+
+block_insert:
+  _: select_block::insert_char
+  tab: select_block::insert_tab
+  backspace: select_block::backspace
+  escape: select_block::apply_and_exit
   ctrl-z: application::suspend
   ctrl-c: application::exit
 

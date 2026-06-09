@@ -22,6 +22,7 @@ pub mod repeat;
 pub mod rg;
 pub mod search;
 pub mod search_select;
+pub mod select_block;
 pub mod selection;
 pub mod view;
 pub mod workspace;
@@ -86,6 +87,26 @@ pub fn hash_map() -> HashMap<&'static str, Command> {
         "application::open_under_cursor",
         application::open_under_cursor,
     );
+
+    // Block selection commands (ensure registration even if build script misses them)
+    map.insert(
+        "select_block::switch_to_select_block_mode",
+        select_block::switch_to_select_block_mode,
+    );
+    map.insert("select_block::block_insert", select_block::block_insert);
+    map.insert("select_block::block_append", select_block::block_append);
+    map.insert("select_block::insert_char", select_block::insert_char);
+    map.insert("select_block::backspace", select_block::backspace);
+    map.insert("select_block::insert_newline", select_block::insert_newline);
+    map.insert("select_block::insert_tab", select_block::insert_tab);
+    map.insert("select_block::apply_and_exit", select_block::apply_and_exit);
+    map.insert("select_block::delete", select_block::delete);
+    map.insert("select_block::copy", select_block::copy);
+    map.insert(
+        "select_block::copy_and_delete",
+        select_block::copy_and_delete,
+    );
+    map.insert("select_block::change", select_block::change);
 
     map
 }

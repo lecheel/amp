@@ -11,6 +11,7 @@ mod path;
 mod search;
 mod search_select;
 mod select;
+pub mod select_block;
 mod select_line;
 mod symbol_jump;
 mod syntax;
@@ -20,6 +21,7 @@ pub use self::ex::ExMode;
 pub use self::fd::FdMode;
 pub use self::file_picker::FilePickerMode;
 pub use self::mru::MRUMode;
+pub use self::select_block::{BlockInsertMode, SelectBlockMode};
 use std::fmt;
 
 pub enum Mode {
@@ -49,6 +51,8 @@ pub enum Mode {
     Syntax(SyntaxMode),
     Theme(ThemeMode),
     MRU(MRUMode),
+    SelectBlock(SelectBlockMode),
+    BlockInsert(BlockInsertMode),
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -79,6 +83,8 @@ pub enum ModeKey {
     Syntax,
     Theme,
     MRU,
+    SelectBlock,
+    BlockInsert,
 }
 
 pub use self::command::CommandMode;
