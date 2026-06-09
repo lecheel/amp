@@ -34,9 +34,10 @@ pub fn hash_map() -> HashMap<&'static str, Command> {
     let mut map: HashMap<&'static str, Command> = include!(concat!(env!("OUT_DIR"), "/hash_map"));
 
     map.insert("application::nop", application::nop);
+    map.insert("buffer_list::accept", buffer_list::accept);
     map.insert(
-        "buffer_list::open_under_cursor",
-        buffer_list::open_under_cursor,
+        "application::switch_to_buffer_list_mode",
+        buffer_list::switch_to_buffer_list_mode,
     );
 
     // Ex mode commands

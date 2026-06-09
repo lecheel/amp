@@ -6,10 +6,8 @@ use crate::models::application::modes::open::DisplayablePath;
 use crate::models::application::BufferPosition;
 use crate::models::application::RepeatableAction;
 use crate::models::application::{Application, Mode, ModeKey};
-use crate::models::application::{BufferMetadata, BufferType};
 use crate::util;
 use log::debug;
-use scribe::buffer::Position;
 use scribe::Buffer;
 use std::fs::{read_to_string, remove_file, File};
 use std::path::PathBuf;
@@ -86,112 +84,7 @@ pub fn switch_to_mru_mode(app: &mut Application) -> Result {
 }
 
 pub fn switch_to_buffer_list_mode(app: &mut Application) -> Result {
-    let start_id = app.workspace.current_buffer.as_ref().map(|b| b.id);
-
-    // 1. Check if the [Buffer List] buffer already exists
-    let mut existing_list_id = None;
-    let mut first = true;
-    loop {
-        if !first && app.workspace.current_buffer.as_ref().map(|b| b.id) == start_id {
-            break;
-        }
-        first = false;
-
-        if let Some(buf) = app.workspace.current_buffer.as_ref() {
-            let is_list = buf
-                .path
-                .as_ref()
-                .map(|p| p.to_string_lossy() == "[Buffer List]")
-                .unwrap_or(false);
-
-            if is_list {
-                existing_list_id = Some(buf.id);
-                break;
-            }
-        }
-        app.workspace.next_buffer();
-    }
-
-    // Reset back to the original buffer before collecting lines
-    while app.workspace.current_buffer.as_ref().map(|b| b.id) != start_id {
-        app.workspace.next_buffer();
-    }
-
-    // 2. Collect current open buffers (excluding the list buffer itself)
-    let mut lines = Vec::new();
-    first = true;
-    loop {
-        if !first && app.workspace.current_buffer.as_ref().map(|b| b.id) == start_id {
-            break;
-        }
-        first = false;
-
-        if let Some(buf) = app.workspace.current_buffer.as_ref() {
-            let is_list = buf
-                .path
-                .as_ref()
-                .map(|p| p.to_string_lossy() == "[Buffer List]")
-                .unwrap_or(false);
-
-            if !is_list {
-                let path_str = buf
-                    .path
-                    .as_ref()
-                    .map(|p| p.to_string_lossy().into_owned())
-                    .unwrap_or_else(|| "[No Name]".to_string());
-                let modified = if app.view.effective_modified(buf) {
-                    " [+]"
-                } else {
-                    ""
-                };
-                lines.push(format!("{}{}", path_str, modified));
-            }
-        }
-        app.workspace.next_buffer();
-    }
-
-    // 3. Build content
-    let mut content = lines.join("\n");
-    if !content.is_empty() {
-        content.push('\n');
-    }
-
-    // 4. Create or update the buffer list
-    if let Some(id) = existing_list_id {
-        // Navigate to the existing list buffer
-        while app.workspace.current_buffer.as_ref().map(|b| b.id) != Some(id) {
-            app.workspace.next_buffer();
-        }
-
-        // Update content programmatically — virtual buffer, no save needed
-        if let Some(buf) = app.workspace.current_buffer.as_mut() {
-            buf.replace(content);
-            buf.cursor.move_to(Position { line: 0, offset: 0 });
-        }
-    } else {
-        // Create a new virtual buffer
-        let mut list_buffer = Buffer::new();
-        list_buffer.path = Some(PathBuf::from("[Buffer List]"));
-        list_buffer.insert(content);
-        list_buffer.cursor.move_to(Position { line: 0, offset: 0 });
-
-        util::add_buffer(list_buffer, app)?;
-
-        // Register as virtual AFTER add_buffer (which may reassign id)
-        if let Some(buf) = app.workspace.current_buffer.as_ref() {
-            app.view.buffer_registry.register(
-                buf.id,
-                BufferMetadata {
-                    buffer_type: BufferType::Virtual,
-                },
-            );
-        }
-    }
-
-    // 5. Drop into normal mode
-    commands::application::switch_to_normal_mode(app)?;
-
-    Ok(())
+    commands::buffer_list::switch_to_buffer_list_mode(app)
 }
 
 pub fn open_under_cursor(app: &mut Application) -> Result {
@@ -201,9 +94,7 @@ pub fn open_under_cursor(app: &mut Application) -> Result {
         .as_ref()
         .and_then(|b| b.path.as_ref())
         .map(|p| p.to_string_lossy().into_owned());
-
     match buffer_path.as_deref() {
-        Some("[Buffer List]") => commands::buffer_list::open_under_cursor(app),
         Some("[Ripgrep Results]") => commands::rg::open_under_cursor(app),
         _ => commands::application::switch_to_symbol_jump_mode(app),
     }

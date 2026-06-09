@@ -271,6 +271,12 @@ impl Application {
                 &mut self.view,
                 &self.error,
             ),
+            Mode::BufferList(ref mut mode) => presenters::modes::buffer_list::display(
+                &mut self.workspace,
+                mode,
+                &mut self.view,
+                &self.error,
+            ),
             Mode::SelectBlock(ref mode) => presenters::modes::select_block::display_select_block(
                 &mut self.workspace,
                 mode,
@@ -507,6 +513,13 @@ impl Application {
                     Some("search_select")
                 }
             }
+            Mode::BufferList(ref mode) => {
+                if mode.insert_mode() {
+                    Some("search_select_insert")
+                } else {
+                    Some("search_select")
+                }
+            }
             Mode::SelectBlock(_) => Some("select_block"),
             Mode::BlockInsert(_) => Some("block_insert"),
             Mode::Fd(ref mode) => {
@@ -601,6 +614,12 @@ impl Application {
         self.modes.insert(
             ModeKey::FilePicker,
             Mode::FilePicker(FilePickerMode::new(
+                self.preferences.borrow().search_select_config(),
+            )),
+        );
+        self.modes.insert(
+            ModeKey::BufferList,
+            Mode::BufferList(BufferListMode::new(
                 self.preferences.borrow().search_select_config(),
             )),
         );

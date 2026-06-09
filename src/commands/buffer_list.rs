@@ -1,108 +1,59 @@
-//--+ src/commands/buffer_list.rs
-
 use crate::commands::{self, Result};
 use crate::errors::*;
-use crate::models::application::Application;
-use std::path::PathBuf;
+use crate::models::application::modes::buffer_list::BufferEntry;
+use crate::models::application::modes::SearchSelectMode;
+use crate::models::application::{Application, Mode, ModeKey};
 
-pub fn open_under_cursor(app: &mut Application) -> Result {
-    // Check if we are in the special buffer list buffer
-    let is_list_buffer = app
-        .workspace
-        .current_buffer
-        .as_ref()
-        .and_then(|b| b.path.as_ref())
-        .map(|p| p.to_string_lossy() == "[Buffer List]")
-        .unwrap_or(false);
-
-    if !is_list_buffer {
-        return commands::application::switch_to_symbol_jump_mode(app);
-    }
-
-    // Read the current line under the cursor
-    let line = app
-        .workspace
-        .current_buffer
-        .as_ref()
-        .and_then(|b| b.data().lines().nth(b.cursor.line).map(|s| s.to_string()))
-        .context("No line under cursor")?;
-
-    let path_str = line.split(" [").next().unwrap().trim();
-
-    if path_str == "[No Name]" {
-        bail!("Cannot open unnamed buffer by path");
-    }
-
-    let target_path = PathBuf::from(path_str);
-
-    // Remember the buffer list's ID so we can remove it later
-    let list_buffer_id = app.workspace.current_buffer.as_ref().and_then(|b| b.id);
-
-    // Find the buffer by cycling through the workspace
+pub fn switch_to_buffer_list_mode(app: &mut Application) -> Result {
+    let mut entries = Vec::new();
     let start_id = app.workspace.current_buffer.as_ref().map(|b| b.id);
+    let mut first = true;
     loop {
-        app.workspace.next_buffer();
+        if !first && app.workspace.current_buffer.as_ref().map(|b| b.id) == start_id {
+            break;
+        }
+        first = false;
         if let Some(buf) = app.workspace.current_buffer.as_ref() {
-            if buf.path.as_ref() == Some(&target_path) {
-                break;
-            }
+            entries.push(BufferEntry {
+                path: buf.path.clone(),
+                buffer_id: buf.id,
+                modified: app.view.effective_modified(buf),
+            });
         }
-        if app.workspace.current_buffer.as_ref().map(|b| b.id) == start_id {
-            bail!("Couldn't find buffer for path: {}", path_str);
-        }
+        app.workspace.next_buffer();
     }
+    let config = app.preferences.borrow().search_select_config();
+    app.switch_to(ModeKey::BufferList);
+    if let Mode::BufferList(ref mut mode) = app.mode {
+        mode.reset(entries, config);
+    }
+    commands::search_select::search(app)?;
+    Ok(())
+}
 
-    // Clean up: close the buffer list buffer
-    if let Some(list_id) = list_buffer_id {
-        // Navigate back to the list buffer to close it
-        let current_id = app.workspace.current_buffer.as_ref().map(|b| b.id);
+pub fn accept(app: &mut Application) -> Result {
+    let selected = if let Mode::BufferList(ref mut mode) = app.mode {
+        mode.selection().cloned()
+    } else {
+        bail!("Not in buffer list mode");
+    };
+    let entry = selected.context("No buffer selected")?;
 
-        // Find and remove the list buffer
-        let mut found = false;
+    // Navigate to the buffer with the matching ID
+    if let Some(target_id) = entry.buffer_id {
+        let start_id = app.workspace.current_buffer.as_ref().map(|b| b.id);
         loop {
-            let buf_id = app.workspace.current_buffer.as_ref().and_then(|b| b.id);
-            if buf_id == Some(list_id) {
-                // Found it — close it
-                if let Some(buf) = app.workspace.current_buffer.as_ref() {
-                    let _ = app.view.forget_buffer(buf);
-                }
-                app.workspace.close_current_buffer();
-                app.view.buffer_registry.unregister(Some(list_id));
-                found = true;
+            if app.workspace.current_buffer.as_ref().and_then(|b| b.id) == Some(target_id) {
                 break;
             }
             app.workspace.next_buffer();
-
-            // Safety: if we've looped all the way around, stop
-            if app.workspace.current_buffer.as_ref().map(|b| b.id) == current_id {
-                break;
-            }
-        }
-
-        // Navigate back to the target buffer
-        if found {
-            loop {
-                if app
-                    .workspace
-                    .current_buffer
-                    .as_ref()
-                    .map(|b| b.path.as_ref())
-                    == Some(Some(&target_path))
-                {
-                    break;
-                }
-                app.workspace.next_buffer();
-
-                // Safety break
-                if app.workspace.current_buffer.as_ref().map(|b| b.id) == current_id {
-                    break;
-                }
+            if app.workspace.current_buffer.as_ref().map(|b| b.id) == start_id {
+                bail!("Couldn't find buffer with ID: {:?}", target_id);
             }
         }
     }
 
-    commands::application::switch_to_normal_mode(app)?;
-    commands::view::scroll_to_cursor(app)?;
-
+    app.switch_to(ModeKey::Normal);
+    commands::view::scroll_cursor_to_center(app).ok();
     Ok(())
 }

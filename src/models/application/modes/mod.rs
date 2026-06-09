@@ -1,3 +1,4 @@
+pub mod buffer_list;
 mod command;
 mod confirm;
 mod ex;
@@ -17,6 +18,7 @@ mod symbol_jump;
 mod syntax;
 mod theme;
 
+pub use self::buffer_list::BufferListMode;
 pub use self::ex::ExMode;
 pub use self::fd::FdMode;
 pub use self::file_picker::FilePickerMode;
@@ -36,6 +38,7 @@ pub enum Mode {
     Normal,
     Ex(ExMode),
     Open(OpenMode),
+    BufferList(BufferListMode),
     Paste,
     Path(PathMode),
     PendingChange(PendingChangeMode),
@@ -66,6 +69,7 @@ pub enum ModeKey {
     Jump,
     LineJump,
     Normal,
+    BufferList,
     Open,
     Ex,
     Paste,
