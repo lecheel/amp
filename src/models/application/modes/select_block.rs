@@ -18,7 +18,9 @@ impl SelectBlockMode {
         let min_line = self.anchor.line.min(cursor.line);
         let max_line = self.anchor.line.max(cursor.line);
         let min_offset = self.anchor.offset.min(cursor.offset);
-        let max_offset = self.anchor.offset.max(cursor.offset);
+        // Always +1: Range is exclusive on the right, so we need max+1
+        // to include the character at max_offset on every line uniformly.
+        let end_offset = self.anchor.offset.max(cursor.offset) + 1;
 
         (min_line..=max_line)
             .map(|line| {
@@ -29,7 +31,7 @@ impl SelectBlockMode {
                     },
                     Position {
                         line,
-                        offset: max_offset,
+                        offset: end_offset,
                     },
                 )
             })
@@ -86,6 +88,9 @@ impl BlockInsertMode {
     }
 
     pub fn to_ranges(&self) -> Vec<Range> {
+        // Always +1 for the same reason: inclusive right edge.
+        let end_offset = self.right_column + 1;
+
         (self.start_line..=self.end_line)
             .map(|line| {
                 Range::new(
@@ -95,7 +100,7 @@ impl BlockInsertMode {
                     },
                     Position {
                         line,
-                        offset: self.right_column,
+                        offset: end_offset,
                     },
                 )
             })

@@ -44,6 +44,7 @@ fn enter_block_insert(app: &mut Application, insert_type: BlockInsertType) -> Re
     let first_line = anchor.line.min(cursor.line);
     let insert_column = match insert_type {
         BlockInsertType::Insert => anchor.offset.min(cursor.offset),
+        // Append goes one past the rightmost selected column.
         BlockInsertType::Append => anchor.offset.max(cursor.offset) + 1,
     };
 
@@ -55,7 +56,7 @@ fn enter_block_insert(app: &mut Application, insert_type: BlockInsertType) -> Re
         .as_mut()
         .context(BUFFER_MISSING)?;
 
-    // Pad the first line if needed (especially for append mode)
+    // Pad the first line if needed (especially for append mode).
     {
         let data = buf.data();
         if let Some(line_content) = data.lines().nth(first_line) {
@@ -194,7 +195,8 @@ fn copy_block_to_clipboard(app: &mut Application) -> Result {
     let min_line = anchor.line.min(cursor.line);
     let max_line = anchor.line.max(cursor.line);
     let min_offset = anchor.offset.min(cursor.offset);
-    let max_offset = anchor.offset.max(cursor.offset);
+    // Always include the character at max_offset.
+    let end_offset = anchor.offset.max(cursor.offset) + 1;
 
     let block_text = {
         let buf = app
@@ -208,7 +210,7 @@ fn copy_block_to_clipboard(app: &mut Application) -> Result {
             if let Some(line) = data.lines().nth(line_no) {
                 let chars: Vec<char> = line.chars().collect();
                 let start = min_offset.min(chars.len());
-                let end = max_offset.min(chars.len());
+                let end = end_offset.min(chars.len());
                 if start < end {
                     let slice: String = chars[start..end].iter().collect();
                     text.push_str(&slice);
@@ -226,8 +228,6 @@ fn copy_block_to_clipboard(app: &mut Application) -> Result {
     Ok(())
 }
 
-/// Delete the rectangular block content from the buffer.
-/// Returns (min_line, max_line, min_offset) for use by callers.
 fn delete_block_content(app: &mut Application) -> anyhow::Result<(usize, usize, usize)> {
     let (anchor, cursor) = match app.mode {
         Mode::SelectBlock(ref mode) => {
@@ -245,7 +245,8 @@ fn delete_block_content(app: &mut Application) -> anyhow::Result<(usize, usize, 
     let min_line = anchor.line.min(cursor.line);
     let max_line = anchor.line.max(cursor.line);
     let min_offset = anchor.offset.min(cursor.offset);
-    let max_offset = anchor.offset.max(cursor.offset);
+    // Always include the character at max_offset.
+    let end_offset = anchor.offset.max(cursor.offset) + 1;
 
     let buf = app
         .workspace
@@ -264,7 +265,7 @@ fn delete_block_content(app: &mut Application) -> anyhow::Result<(usize, usize, 
         if line_len <= min_offset {
             continue;
         }
-        let delete_end = max_offset.min(line_len);
+        let delete_end = end_offset.min(line_len);
         let range = Range::new(
             Position {
                 line,
