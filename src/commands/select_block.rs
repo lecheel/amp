@@ -1,3 +1,4 @@
+//--+ ./commands/select_block.rs
 use crate::commands::{self, Result};
 use crate::errors::*;
 use crate::input::Key;
@@ -44,7 +45,6 @@ fn enter_block_insert(app: &mut Application, insert_type: BlockInsertType) -> Re
     let first_line = anchor.line.min(cursor.line);
     let insert_column = match insert_type {
         BlockInsertType::Insert => anchor.offset.min(cursor.offset),
-        // Append goes one past the rightmost selected column.
         BlockInsertType::Append => anchor.offset.max(cursor.offset) + 1,
     };
 
@@ -195,7 +195,6 @@ fn copy_block_to_clipboard(app: &mut Application) -> Result {
     let min_line = anchor.line.min(cursor.line);
     let max_line = anchor.line.max(cursor.line);
     let min_offset = anchor.offset.min(cursor.offset);
-    // Always include the character at max_offset.
     let end_offset = anchor.offset.max(cursor.offset) + 1;
 
     let block_text = {
@@ -245,7 +244,6 @@ fn delete_block_content(app: &mut Application) -> anyhow::Result<(usize, usize, 
     let min_line = anchor.line.min(cursor.line);
     let max_line = anchor.line.max(cursor.line);
     let min_offset = anchor.offset.min(cursor.offset);
-    // Always include the character at max_offset.
     let end_offset = anchor.offset.max(cursor.offset) + 1;
 
     let buf = app
@@ -292,7 +290,9 @@ fn delete_block_content(app: &mut Application) -> anyhow::Result<(usize, usize, 
 // ---------------------------------------------------------------------------
 
 pub fn delete(app: &mut Application) -> Result {
+    commands::buffer::start_command_group(app)?;
     delete_block_content(app)?;
+    commands::buffer::end_command_group(app)?;
     commands::application::switch_to_normal_mode(app)?;
     commands::view::scroll_to_cursor(app)?;
     Ok(())
@@ -305,7 +305,9 @@ pub fn copy(app: &mut Application) -> Result {
 
 pub fn copy_and_delete(app: &mut Application) -> Result {
     copy_block_to_clipboard(app)?;
+    commands::buffer::start_command_group(app)?;
     delete_block_content(app)?;
+    commands::buffer::end_command_group(app)?;
     commands::application::switch_to_normal_mode(app)?;
     commands::view::scroll_to_cursor(app)?;
     Ok(())
@@ -313,9 +315,10 @@ pub fn copy_and_delete(app: &mut Application) -> Result {
 
 pub fn change(app: &mut Application) -> Result {
     copy_block_to_clipboard(app)?;
-    let (min_line, max_line, min_offset) = delete_block_content(app)?;
-
+    // Start the group BEFORE deletion so the delete + subsequent insert
+    // are all one atomic undo step.
     commands::buffer::start_command_group(app)?;
+    let (min_line, max_line, min_offset) = delete_block_content(app)?;
 
     app.switch_to(ModeKey::BlockInsert);
     if let Mode::BlockInsert(ref mut mode) = app.mode {
