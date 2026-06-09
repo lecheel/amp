@@ -2,6 +2,7 @@ mod command;
 mod confirm;
 mod ex;
 pub mod fd;
+pub mod file_picker;
 pub mod jump;
 mod line_jump;
 mod mru;
@@ -17,6 +18,7 @@ mod theme;
 
 pub use self::ex::ExMode;
 pub use self::fd::FdMode;
+pub use self::file_picker::FilePickerMode;
 pub use self::mru::MRUMode;
 use std::fmt;
 
@@ -25,6 +27,7 @@ pub enum Mode {
     Confirm(ConfirmMode),
     Exit,
     Fd(FdMode),
+    FilePicker(FilePickerMode),
     Insert,
     Jump(JumpMode),
     LineJump(LineJumpMode),
@@ -54,6 +57,7 @@ pub enum ModeKey {
     Confirm,
     Exit,
     Fd,
+    FilePicker,
     Insert,
     Jump,
     LineJump,

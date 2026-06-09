@@ -22,6 +22,9 @@ pub fn accept(app: &mut Application) -> Result {
             // Delegate to fd::accept
             commands::fd::accept(app)?;
         }
+        Mode::FilePicker(ref mut _mode) => {
+            commands::file_picker::accept(app)?;
+        }
         Mode::Open(ref mut mode) => {
             if mode.selection().is_none() {
                 bail!("No buffer selected");
@@ -90,6 +93,7 @@ pub fn accept(app: &mut Application) -> Result {
 pub fn search(app: &mut Application) -> Result {
     match app.mode {
         Mode::MRU(ref mut mode) => mode.search(),
+        Mode::FilePicker(ref mut mode) => mode.search(),
         Mode::Fd(ref mut mode) => mode.search(),
         Mode::Command(ref mut mode) => mode.search(),
         Mode::Open(ref mut mode) => mode.search(),
@@ -104,6 +108,7 @@ pub fn search(app: &mut Application) -> Result {
 pub fn select_next(app: &mut Application) -> Result {
     match app.mode {
         Mode::MRU(ref mut mode) => mode.select_next(),
+        Mode::FilePicker(ref mut mode) => mode.select_next(),
         Mode::Fd(ref mut mode) => mode.select_next(),
         Mode::Command(ref mut mode) => mode.select_next(),
         Mode::Open(ref mut mode) => mode.select_next(),
@@ -132,6 +137,7 @@ pub fn select_previous(app: &mut Application) -> Result {
 pub fn enable_insert(app: &mut Application) -> Result {
     match app.mode {
         Mode::MRU(ref mut mode) => mode.set_insert_mode(true),
+        Mode::FilePicker(ref mut mode) => mode.set_insert_mode(true),
         Mode::Fd(ref mut mode) => mode.set_insert_mode(true),
         Mode::Command(ref mut mode) => mode.set_insert_mode(true),
         Mode::Open(ref mut mode) => mode.set_insert_mode(true),
@@ -146,6 +152,7 @@ pub fn enable_insert(app: &mut Application) -> Result {
 pub fn disable_insert(app: &mut Application) -> Result {
     match app.mode {
         Mode::MRU(ref mut mode) => mode.set_insert_mode(false),
+        Mode::FilePicker(ref mut mode) => mode.set_insert_mode(false),
         Mode::Fd(ref mut mode) => mode.set_insert_mode(false),
         Mode::Command(ref mut mode) => mode.set_insert_mode(false),
         Mode::Open(ref mut mode) => mode.set_insert_mode(false),
@@ -161,6 +168,7 @@ pub fn push_search_char(app: &mut Application) -> Result {
     if let Some(Key::Char(c)) = *app.view.last_key() {
         match app.mode {
             Mode::MRU(ref mut mode) => mode.push_search_char(c),
+            Mode::FilePicker(ref mut mode) => mode.push_search_char(c),
             Mode::Fd(ref mut mode) => mode.push_search_char(c),
             Mode::Command(ref mut mode) => mode.push_search_char(c),
             Mode::Open(ref mut mode) => mode.push_search_char(c),
@@ -176,6 +184,7 @@ pub fn push_search_char(app: &mut Application) -> Result {
 pub fn pop_search_token(app: &mut Application) -> Result {
     match app.mode {
         Mode::MRU(ref mut mode) => mode.pop_search_token(),
+        Mode::FilePicker(ref mut mode) => mode.pop_search_token(),
         Mode::Fd(ref mut mode) => mode.pop_search_token(),
         Mode::Command(ref mut mode) => mode.pop_search_token(),
         Mode::Open(ref mut mode) => mode.pop_search_token(),
@@ -191,6 +200,7 @@ pub fn pop_search_token(app: &mut Application) -> Result {
 pub fn step_back(app: &mut Application) -> Result {
     let selection_available = match app.mode {
         Mode::MRU(ref mut mode) => mode.results().count() > 0 && !mode.query().is_empty(),
+        Mode::FilePicker(ref mut mode) => mode.results().count() > 0 && !mode.query().is_empty(),
         Mode::Fd(ref mut mode) => mode.results().count() > 0 && !mode.query().is_empty(),
         Mode::Command(ref mut mode) => mode.results().count() > 0 && !mode.query().is_empty(),
         Mode::Open(ref mut mode) => mode.results().count() > 0 && !mode.query().is_empty(),

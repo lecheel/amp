@@ -10,6 +10,7 @@ pub mod confirm;
 pub mod cursor;
 pub mod ex;
 pub mod fd;
+pub mod file_picker;
 pub mod git;
 pub mod jump;
 pub mod line_jump;
@@ -52,6 +53,12 @@ pub fn hash_map() -> HashMap<&'static str, Command> {
     map.insert("ex::navigate_right", ex::navigate_right);
     map.insert("git::revert_hunk", git::revert_hunk);
     map.insert("cursor::match_bracket", cursor::match_bracket);
+    map.insert(
+        "file_picker::switch_to_file_picker_mode",
+        file_picker::switch_to_file_picker_mode,
+    );
+    map.insert("file_picker::accept", file_picker::accept);
+    map.insert("file_picker::navigate_up", file_picker::navigate_up);
     map.insert("fd::switch_to_fd_mode", fd::switch_to_fd_mode_no_filter);
     map.insert("fd::accept", fd::accept);
     map.insert(

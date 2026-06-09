@@ -265,6 +265,12 @@ impl Application {
                 &mut self.view,
                 &self.error,
             ),
+            Mode::FilePicker(ref mut mode) => presenters::modes::file_picker::display(
+                &mut self.workspace,
+                mode,
+                &mut self.view,
+                &self.error,
+            ),
             Mode::MRU(ref mut mode) => presenters::modes::search_select::display(
                 &mut self.workspace,
                 mode,
@@ -482,6 +488,13 @@ impl Application {
                     Some("search_select")
                 }
             }
+            Mode::FilePicker(ref mode) => {
+                if mode.insert_mode() {
+                    Some("search_select_insert")
+                } else {
+                    Some("search_select")
+                }
+            }
             Mode::Fd(ref mode) => {
                 if mode.insert_mode() {
                     Some("search_select_insert")
@@ -571,6 +584,12 @@ impl Application {
         self.modes.insert(ModeKey::Insert, Mode::Insert);
         self.modes.insert(ModeKey::Normal, Mode::Normal);
         self.modes.insert(ModeKey::Paste, Mode::Paste);
+        self.modes.insert(
+            ModeKey::FilePicker,
+            Mode::FilePicker(FilePickerMode::new(
+                self.preferences.borrow().search_select_config(),
+            )),
+        );
         self.modes.insert(
             ModeKey::Leader,
             Mode::PendingLeader(PendingLeaderMode::new()),

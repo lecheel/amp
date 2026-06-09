@@ -1,6 +1,7 @@
 pub mod confirm;
 pub mod ex;
 pub mod fd;
+pub mod file_picker;
 pub mod insert;
 pub mod jump;
 pub mod line_jump;
