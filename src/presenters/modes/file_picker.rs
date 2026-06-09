@@ -40,16 +40,13 @@ pub fn display(
 
     // Popup Sizing & Centering
     let box_w = std::cmp::max((presenter.width() as f32 * 0.6).ceil() as usize, 40);
-    const FIXED_BODY_LINES: usize = 9;
+    const FIXED_BODY_LINES: usize = 12;
 
-    // Layout: Top border(1) + Title(1) + Sep(1) + Input(1) + Sep(1) + Items(9) + Bottom border(1)
-    let box_h = FIXED_BODY_LINES + 6;
+    // Layout: Top border with title(1) + Input(1) + Items(9) + Bottom border(1)
+    let box_h = FIXED_BODY_LINES + 3;
 
-    // Center vertically and horizontally
     let row0 = (presenter.height().saturating_sub(1).saturating_sub(box_h)) / 2;
     let col0 = (presenter.width().saturating_sub(box_w)) / 2;
-
-    // inner_w is the area inside the borders, minus 2 spaces for left/right padding
     let inner_w = box_w.saturating_sub(4);
 
     // Colors
@@ -64,44 +61,7 @@ pub fn display(
     let text_colors = Colors::Custom(light_fg, dark_bg);
     let title_colors = Colors::Custom(dir_fg, dark_bg);
 
-    // Helper to draw horizontal line
-    let draw_hline = |presenter: &mut crate::view::Presenter,
-                      row: usize,
-                      col0: usize,
-                      box_w: usize,
-                      border_colors: Colors| {
-        presenter.print(
-            &Position {
-                line: row,
-                offset: col0,
-            },
-            Style::Default,
-            border_colors,
-            "+",
-        );
-        for c in 1..box_w.saturating_sub(1) {
-            presenter.print(
-                &Position {
-                    line: row,
-                    offset: col0 + c,
-                },
-                Style::Default,
-                border_colors,
-                "-",
-            );
-        }
-        presenter.print(
-            &Position {
-                line: row,
-                offset: col0 + box_w - 1,
-            },
-            Style::Default,
-            border_colors,
-            "+",
-        );
-    };
-
-    // Helper to draw a padded line inside the box with specific background colors
+    // Helper to draw a padded line inside the box
     let print_line = |presenter: &mut crate::view::Presenter,
                       row: usize,
                       text: &str,
@@ -114,13 +74,11 @@ pub fn display(
             },
             Style::Default,
             border_colors,
-            "|",
+            "│",
         );
 
-        // Format with 1 space padding on each side
         let padded = format!(" {:width$} ", text, width = inner_w);
 
-        // Print the padded string, applying the background color to the entire line
         for (gi, grapheme) in padded.graphemes(true).enumerate().take(inner_w + 2) {
             presenter.print(
                 &Position {
@@ -140,29 +98,75 @@ pub fn display(
             },
             Style::Default,
             border_colors,
-            "|",
+            "│",
         );
     };
 
-    // 1. Top border
-    draw_hline(&mut presenter, row0, col0, box_w, border_colors);
-
-    // 2. Title (Current Directory)
-    let title_row = row0 + 1;
-    let title_str = mode.current_dir.to_string_lossy().to_string();
-    print_line(
-        &mut presenter,
-        title_row,
-        &title_str,
-        Style::Bold,
-        title_colors,
+    // 1. Top border (Rounded with Title embedded)
+    presenter.print(
+        &Position {
+            line: row0,
+            offset: col0,
+        },
+        Style::Default,
+        border_colors,
+        "╭",
     );
 
-    // 3. Separator
-    draw_hline(&mut presenter, row0 + 2, col0, box_w, border_colors);
+    let title_str = format!(" {} ", mode.current_dir.to_string_lossy());
+    let title_glen = title_str.graphemes(true).count();
+    let max_title_len = box_w.saturating_sub(2);
 
-    // 4. Input Row (on top!)
-    let input_row = row0 + 3;
+    if title_glen >= max_title_len {
+        let truncated: String = title_str.graphemes(true).take(max_title_len).collect();
+        for (gi, g) in truncated.graphemes(true).enumerate() {
+            presenter.print(
+                &Position {
+                    line: row0,
+                    offset: col0 + 1 + gi,
+                },
+                Style::Bold,
+                title_colors,
+                g.to_string(),
+            );
+        }
+    } else {
+        for (gi, g) in title_str.graphemes(true).enumerate() {
+            presenter.print(
+                &Position {
+                    line: row0,
+                    offset: col0 + 1 + gi,
+                },
+                Style::Bold,
+                title_colors,
+                g.to_string(),
+            );
+        }
+        let dash_count = max_title_len.saturating_sub(title_glen);
+        for c in 0..dash_count {
+            presenter.print(
+                &Position {
+                    line: row0,
+                    offset: col0 + 1 + title_glen + c,
+                },
+                Style::Default,
+                border_colors,
+                "─",
+            );
+        }
+    }
+    presenter.print(
+        &Position {
+            line: row0,
+            offset: col0 + box_w - 1,
+        },
+        Style::Default,
+        border_colors,
+        "╮",
+    );
+
+    // 2. Input Row
+    let input_row = row0 + 1;
     let input_str = format!("> {}", mode.query());
     let input_colors = if mode.insert_mode() {
         Colors::Insert
@@ -177,16 +181,30 @@ pub fn display(
         input_colors,
     );
 
-    // 5. Separator
-    draw_hline(&mut presenter, row0 + 4, col0, box_w, border_colors);
+    // 3. Items (Fixed height of 9 lines, scrolling window)
+    let selected = mode.selected_index();
+    let _result_count = mode.results().count();
 
-    // 6. Items (Fixed height of 9 lines, padded if empty)
+    // Compute new scroll offset before borrowing results for rendering
+    let new_scroll_offset = if selected < mode.scroll_offset {
+        selected
+    } else if selected >= mode.scroll_offset + FIXED_BODY_LINES {
+        selected + 1 - FIXED_BODY_LINES
+    } else {
+        mode.scroll_offset
+    };
+    mode.scroll_offset = new_scroll_offset;
+    let scroll_offset = new_scroll_offset;
+
+    // Now collect results — this borrow is no longer competing with the write above
     let results = mode.results().collect::<Vec<_>>();
-    for i in 0..FIXED_BODY_LINES {
-        let row = row0 + 5 + i;
 
-        if i < results.len() {
-            let entry = results[i];
+    for i in 0..FIXED_BODY_LINES {
+        let row = row0 + 2 + i;
+        let result_index = scroll_offset + i;
+
+        if result_index < results.len() {
+            let entry = results[result_index];
             let is_dir = entry.0.is_dir();
             let name = entry
                 .0
@@ -195,7 +213,7 @@ pub fn display(
                 .unwrap_or_default();
             let display_str = if is_dir { format!("{}/", name) } else { name };
 
-            let (colors, style) = if i == mode.selected_index() {
+            let (colors, style) = if result_index == selected {
                 (Colors::Custom(sel_fg, sel_bg), Style::Bold)
             } else if is_dir {
                 (Colors::Custom(dir_fg, dark_bg), Style::Default)
@@ -205,23 +223,44 @@ pub fn display(
 
             print_line(&mut presenter, row, &display_str, style, colors);
         } else {
-            // Draw empty padded line to maintain box size
             print_line(&mut presenter, row, "", Style::Default, text_colors);
         }
     }
 
-    // 7. Bottom border
-    let bottom_row = row0 + 5 + FIXED_BODY_LINES;
-    draw_hline(&mut presenter, bottom_row, col0, box_w, border_colors);
+    // 4. Bottom border (Rounded)
+    let bottom_row = row0 + 2 + FIXED_BODY_LINES;
+    presenter.print(
+        &Position {
+            line: bottom_row,
+            offset: col0,
+        },
+        Style::Default,
+        border_colors,
+        "╰",
+    );
+    for c in 1..box_w.saturating_sub(1) {
+        presenter.print(
+            &Position {
+                line: bottom_row,
+                offset: col0 + c,
+            },
+            Style::Default,
+            border_colors,
+            "─",
+        );
+    }
+    presenter.print(
+        &Position {
+            line: bottom_row,
+            offset: col0 + box_w - 1,
+        },
+        Style::Default,
+        border_colors,
+        "╯",
+    );
 
-    // 8. Cursor positioning
+    // 5. Cursor positioning
     if mode.insert_mode() {
-        // The string is "> query", which inside the box is " > query ".
-        // col0: '|'
-        // col0 + 1: ' ' (padding)
-        // col0 + 2: '>'
-        // col0 + 3: ' ' (space after >)
-        // col0 + 4: first char of query
         let cursor_offset = col0 + 4 + mode.query().graphemes(true).count();
 
         presenter.set_cursor(Some(Position {

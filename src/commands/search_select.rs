@@ -24,19 +24,18 @@ pub fn accept(app: &mut Application) -> Result {
         }
         Mode::FilePicker(ref mut _mode) => {
             commands::file_picker::accept(app)?;
+            return Ok(());
         }
         Mode::Open(ref mut mode) => {
             if mode.selection().is_none() {
                 bail!("No buffer selected");
             }
-
             for DisplayablePath(path) in mode.selections() {
                 let syntax_definition = app
                     .preferences
                     .borrow()
                     .syntax_definition_name(path)
                     .and_then(|name| app.workspace.syntax_set.find_syntax_by_name(&name).cloned());
-
                 app.workspace
                     .open_buffer(path)
                     .context("Couldn't open a buffer for the specified path.")?;
@@ -48,7 +47,6 @@ pub fn accept(app: &mut Application) -> Result {
                 if syntax_definition.is_some() {
                     buffer.syntax_definition = syntax_definition;
                 }
-
                 app.view.initialize_buffer(buffer)?;
             }
         }
@@ -66,7 +64,6 @@ pub fn accept(app: &mut Application) -> Result {
                 .selection()
                 .context("Couldn't find a position for the selected symbol")?
                 .position;
-
             if !buffer.cursor.move_to(position) {
                 bail!("Couldn't move to the selected symbol's position");
             }
@@ -86,7 +83,6 @@ pub fn accept(app: &mut Application) -> Result {
 
     app.switch_to(ModeKey::Normal);
     commands::view::scroll_cursor_to_center(app).ok();
-
     Ok(())
 }
 

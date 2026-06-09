@@ -25,9 +25,9 @@ pub fn accept(app: &mut Application) -> Result {
         // Navigate into directory
         if let Mode::FilePicker(ref mut mode) = app.mode {
             mode.current_dir = selected_path;
-            mode.query().clear(); // <-- Changed from mode.input.clear()
-            mode.reload();
-            commands::search_select::search(app)?;
+            mode.scroll_offset = 0;
+            mode.query().clear();
+            mode.reload(); // reload() already calls search() internally
         }
         Ok(())
     } else {
@@ -46,6 +46,8 @@ pub fn accept(app: &mut Application) -> Result {
             buffer.syntax_definition = syntax_definition;
         }
         app.view.initialize_buffer(buffer)?;
+
+        // Only switch to normal mode when opening a file
         app.switch_to(ModeKey::Normal);
         commands::view::scroll_cursor_to_center(app).ok();
         Ok(())
@@ -55,7 +57,6 @@ pub fn accept(app: &mut Application) -> Result {
 pub fn navigate_up(app: &mut Application) -> Result {
     if let Mode::FilePicker(ref mut mode) = app.mode {
         mode.navigate_up();
-        commands::search_select::search(app)?;
     }
     Ok(())
 }

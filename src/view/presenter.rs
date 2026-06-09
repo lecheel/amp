@@ -223,17 +223,18 @@ impl<'p> Presenter<'p> {
         const HORIZONTAL_PAD: usize = 2;
         const BORDER_WIDTH: usize = 1;
 
-        let mut visible: Vec<String> = Vec::new();
-        if !title.is_empty() {
-            visible.push(title.to_string());
-        }
-        visible.extend(lines.iter().take(MAX_CONTENT_LINES).map(|s| s.to_string()));
+        // Don't add title to visible lines anymore, it goes in the border
+        let mut visible: Vec<String> = lines
+            .iter()
+            .take(MAX_CONTENT_LINES)
+            .map(|s| s.to_string())
+            .collect();
         if lines.len() > MAX_CONTENT_LINES {
             if let Some(last) = visible.last_mut() {
                 *last = format!("{}…", last.trim_end());
             }
         }
-        if visible.is_empty() {
+        if visible.is_empty() && title.is_empty() {
             return;
         }
 
@@ -249,6 +250,7 @@ impl<'p> Presenter<'p> {
             }
         }
 
+        // box_h is now just content + 2 borders
         let box_h = visible.len() + 2;
         let bottom_row = self.height().saturating_sub(2);
         let row0 = bottom_row.saturating_sub(box_h.saturating_sub(1));
@@ -269,9 +271,8 @@ impl<'p> Presenter<'p> {
         let border_colors = Colors::Custom(border_fg, dark_bg);
         let text_colors = Colors::Custom(light_fg, dark_bg);
         let title_colors = Colors::Custom(title_fg, dark_bg);
-        let is_title_row = !title.is_empty();
 
-        // Top border: +---...---+
+        // Top border: ╭ Title ───╮
         self.print(
             &Position {
                 line: row0,
@@ -279,18 +280,64 @@ impl<'p> Presenter<'p> {
             },
             Style::Default,
             border_colors,
-            "+",
+            "╭",
         );
-        for c in 1..box_w.saturating_sub(1) {
-            self.print(
-                &Position {
-                    line: row0,
-                    offset: col0 + c,
-                },
-                Style::Default,
-                border_colors,
-                "-",
-            );
+
+        if title.is_empty() {
+            for c in 1..box_w.saturating_sub(1) {
+                self.print(
+                    &Position {
+                        line: row0,
+                        offset: col0 + c,
+                    },
+                    Style::Default,
+                    border_colors,
+                    "─",
+                );
+            }
+        } else {
+            let t_str = format!(" {} ", title);
+            let t_len = t_str.graphemes(true).count();
+            let max_t_len = box_w.saturating_sub(2);
+
+            if t_len >= max_t_len {
+                let truncated: String = t_str.graphemes(true).take(max_t_len).collect();
+                for (gi, g) in truncated.graphemes(true).enumerate() {
+                    self.print(
+                        &Position {
+                            line: row0,
+                            offset: col0 + 1 + gi,
+                        },
+                        Style::Bold,
+                        title_colors,
+                        g.to_string(),
+                    );
+                }
+            } else {
+                for (gi, g) in t_str.graphemes(true).enumerate() {
+                    self.print(
+                        &Position {
+                            line: row0,
+                            offset: col0 + 1 + gi,
+                        },
+                        Style::Bold,
+                        title_colors,
+                        g.to_string(),
+                    );
+                }
+                let dash_count = max_t_len.saturating_sub(t_len);
+                for c in 0..dash_count {
+                    self.print(
+                        &Position {
+                            line: row0,
+                            offset: col0 + 1 + t_len + c,
+                        },
+                        Style::Default,
+                        border_colors,
+                        "─",
+                    );
+                }
+            }
         }
         self.print(
             &Position {
@@ -299,10 +346,10 @@ impl<'p> Presenter<'p> {
             },
             Style::Default,
             border_colors,
-            "+",
+            "╮",
         );
 
-        // Content rows: | text |
+        // Content rows: │ text │
         for (i, line) in visible.iter().enumerate() {
             let row = row0 + 1 + i;
 
@@ -313,7 +360,7 @@ impl<'p> Presenter<'p> {
                 },
                 Style::Default,
                 border_colors,
-                "|",
+                "│",
             );
 
             for c in 0..box_w.saturating_sub(2) {
@@ -328,16 +375,6 @@ impl<'p> Presenter<'p> {
                 );
             }
 
-            let colors_for_row = if is_title_row && i == 0 {
-                title_colors
-            } else {
-                text_colors
-            };
-            let style_for_row = if is_title_row && i == 0 {
-                Style::Bold
-            } else {
-                Style::Default
-            };
             for (gi, grapheme) in line.graphemes(true).enumerate() {
                 if gi >= inner_w {
                     break;
@@ -347,8 +384,8 @@ impl<'p> Presenter<'p> {
                         line: row,
                         offset: col0 + BORDER_WIDTH + HORIZONTAL_PAD + gi,
                     },
-                    style_for_row,
-                    colors_for_row,
+                    Style::Default,
+                    text_colors,
                     grapheme.to_string(),
                 );
             }
@@ -360,11 +397,11 @@ impl<'p> Presenter<'p> {
                 },
                 Style::Default,
                 border_colors,
-                "|",
+                "│",
             );
         }
 
-        // Bottom border: +---...---+
+        // Bottom border: ╰───...───╯
         let last_row = row0 + box_h - 1;
         self.print(
             &Position {
@@ -373,7 +410,7 @@ impl<'p> Presenter<'p> {
             },
             Style::Default,
             border_colors,
-            "+",
+            "╰",
         );
         for c in 1..box_w.saturating_sub(1) {
             self.print(
@@ -383,7 +420,7 @@ impl<'p> Presenter<'p> {
                 },
                 Style::Default,
                 border_colors,
-                "-",
+                "─",
             );
         }
         self.print(
@@ -393,7 +430,7 @@ impl<'p> Presenter<'p> {
             },
             Style::Default,
             border_colors,
-            "+",
+            "╯",
         );
     }
 

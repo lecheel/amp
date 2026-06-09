@@ -14,6 +14,7 @@ pub struct FilePickerMode {
     all_results: Vec<DisplayablePath>,
     results: SelectableVec<DisplayablePath>,
     config: SearchSelectConfig,
+    pub scroll_offset: usize,
 }
 
 impl FilePickerMode {
@@ -25,6 +26,7 @@ impl FilePickerMode {
             entries: Vec::new(),
             all_results: Vec::new(),
             results: SelectableVec::new(Vec::new()),
+            scroll_offset: 0,
             config,
         }
     }
