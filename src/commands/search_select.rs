@@ -123,6 +123,7 @@ pub fn select_next(app: &mut Application) -> Result {
 pub fn select_previous(app: &mut Application) -> Result {
     match app.mode {
         Mode::MRU(ref mut mode) => mode.select_previous(),
+        Mode::FilePicker(ref mut mode) => mode.select_previous(),
         Mode::Fd(ref mut mode) => mode.select_previous(),
         Mode::Command(ref mut mode) => mode.select_previous(),
         Mode::Open(ref mut mode) => mode.select_previous(),
