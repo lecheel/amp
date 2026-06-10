@@ -12,10 +12,11 @@ pub fn display(
 ) -> Result<()> {
     let mut presenter = view.build_presenter()?;
     let buffer_status = current_buffer_status_line_data(workspace);
-
     if let Some(buf) = workspace.current_buffer.as_ref() {
         let data = buf.data();
         presenter.print_buffer(buf, &data, &workspace.syntax_set, None, None)?;
+
+        let entries = presenter.which_key_entries("pending_left_bracket");
 
         if let Some(e) = error {
             presenter.print_error(&e.to_string());
@@ -31,9 +32,9 @@ pub fn display(
             ]);
         }
 
+        presenter.print_which_key_popup("[", &entries);
         presenter.set_cursor_type(CursorType::Block);
         presenter.present()?;
     }
-
     Ok(())
 }

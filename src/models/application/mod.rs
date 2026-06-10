@@ -396,8 +396,9 @@ impl Application {
                 &self.repository,
                 &self.error,
             ),
-            Mode::PendingLeader(_) => presenters::modes::pending_leader::display(
+            Mode::PendingLeader(ref mut mode) => presenters::modes::pending_leader::display(
                 &mut self.workspace,
+                mode,
                 &mut self.view,
                 &self.error,
             ),

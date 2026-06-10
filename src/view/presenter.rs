@@ -1,4 +1,5 @@
 use crate::errors::*;
+use crate::input::Key;
 use crate::models::application::CompletionState;
 use crate::view::buffer::{BufferRenderer, LexemeMapper};
 use crate::view::color::{ColorMap, Colors};
@@ -626,6 +627,251 @@ impl<'p> Presenter<'p> {
                 );
             }
         }
+    }
+
+    pub fn which_key_entries(&self, mode: &str) -> Vec<(String, String)> {
+        self.view
+            .preferences
+            .borrow()
+            .keymap()
+            .which_key_entries(mode)
+    }
+
+    pub fn which_key_leader_entries(&self, keys: &[Key]) -> Vec<(String, String)> {
+        self.view
+            .preferences
+            .borrow()
+            .keymap()
+            .which_key_leader_entries(keys)
+    }
+
+    pub fn print_which_key_popup(&mut self, title: &str, entries: &[(String, String)]) {
+        const MIN_WIDTH: usize = 30;
+        const MAX_ROWS: usize = 10;
+        const HORIZONTAL_PAD: usize = 2;
+        const BORDER_WIDTH: usize = 1;
+        const GAP: usize = 2;
+
+        if entries.is_empty() {
+            return;
+        }
+
+        let visible: Vec<&(String, String)> = entries.iter().take(MAX_ROWS).collect();
+
+        // Calculate key column width based on actual entries
+        let key_col_width = visible
+            .iter()
+            .map(|(key, _)| key.graphemes(true).count())
+            .max()
+            .unwrap_or(3)
+            .max(3);
+
+        // Calculate max description width
+        let desc_col_width = visible
+            .iter()
+            .map(|(_, desc)| desc.graphemes(true).count())
+            .max()
+            .unwrap_or(0);
+
+        // Box dimensions
+        let content_width = key_col_width + GAP + desc_col_width;
+        let box_w = std::cmp::max(
+            MIN_WIDTH,
+            content_width + 2 * HORIZONTAL_PAD + 2 * BORDER_WIDTH,
+        );
+        let box_h = visible.len() + 2; // top + bottom border
+
+        // Position: bottom-right, above status line
+        let bottom_row = self.height().saturating_sub(2);
+        let row0 = bottom_row.saturating_sub(box_h.saturating_sub(1));
+        let col0 = self.width().saturating_sub(box_w);
+
+        // Colors
+        let border_fg = crate::view::RGBColor(0x58, 0x5C, 0x6E);
+        let dark_bg = crate::view::RGBColor(0x1E, 0x1E, 0x2E);
+        let light_fg = crate::view::RGBColor(0xC0, 0xCA, 0xF5);
+        let key_fg = crate::view::RGBColor(0x89, 0xB4, 0xFA);
+        let title_fg = crate::view::RGBColor(0xA6, 0xE3, 0xA1);
+
+        let border_colors = Colors::Custom(border_fg, dark_bg);
+        let text_colors = Colors::Custom(light_fg, dark_bg);
+        let key_colors = Colors::Custom(key_fg, dark_bg);
+        let title_colors = Colors::Custom(title_fg, dark_bg);
+
+        // Top border with title
+        self.print(
+            &Position {
+                line: row0,
+                offset: col0,
+            },
+            Style::Default,
+            border_colors,
+            "╭",
+        );
+        if title.is_empty() {
+            for c in 1..box_w.saturating_sub(1) {
+                self.print(
+                    &Position {
+                        line: row0,
+                        offset: col0 + c,
+                    },
+                    Style::Default,
+                    border_colors,
+                    "─",
+                );
+            }
+        } else {
+            let t_str = format!(" {} ", title);
+            let t_len = t_str.graphemes(true).count();
+            let max_t_len = box_w.saturating_sub(2);
+            let display_title: String = if t_len > max_t_len {
+                t_str.graphemes(true).take(max_t_len).collect()
+            } else {
+                t_str.clone()
+            };
+            for (gi, g) in display_title.graphemes(true).enumerate() {
+                self.print(
+                    &Position {
+                        line: row0,
+                        offset: col0 + 1 + gi,
+                    },
+                    Style::Bold,
+                    title_colors,
+                    g.to_string(),
+                );
+            }
+            let dash_count = max_t_len.saturating_sub(display_title.graphemes(true).count());
+            for c in 0..dash_count {
+                self.print(
+                    &Position {
+                        line: row0,
+                        offset: col0 + 1 + display_title.graphemes(true).count() + c,
+                    },
+                    Style::Default,
+                    border_colors,
+                    "─",
+                );
+            }
+        }
+        self.print(
+            &Position {
+                line: row0,
+                offset: col0 + box_w - 1,
+            },
+            Style::Default,
+            border_colors,
+            "╮",
+        );
+
+        // Content rows
+        let inner_w = box_w.saturating_sub(2 * BORDER_WIDTH);
+        for (i, (key, desc)) in visible.iter().enumerate() {
+            let row = row0 + 1 + i;
+
+            // Left border
+            self.print(
+                &Position {
+                    line: row,
+                    offset: col0,
+                },
+                Style::Default,
+                border_colors,
+                "│",
+            );
+
+            // Clear content area
+            for c in 0..inner_w {
+                self.print(
+                    &Position {
+                        line: row,
+                        offset: col0 + BORDER_WIDTH + c,
+                    },
+                    Style::Default,
+                    text_colors,
+                    " ",
+                );
+            }
+
+            // Key (left-padded within key column)
+            let key_start = col0 + BORDER_WIDTH + HORIZONTAL_PAD;
+            let key_max = inner_w.saturating_sub(2 * HORIZONTAL_PAD);
+            let key_display: String = key.graphemes(true).take(key_max).collect();
+            // Right-pad the key to key_col_width
+            let key_padded = format!("{:width$}", key_display, width = key_col_width);
+            for (gi, grapheme) in key_padded.graphemes(true).enumerate() {
+                if gi >= key_max {
+                    break;
+                }
+                self.print(
+                    &Position {
+                        line: row,
+                        offset: key_start + gi,
+                    },
+                    Style::Bold,
+                    key_colors,
+                    grapheme.to_string(),
+                );
+            }
+
+            // Description
+            let desc_start = key_start + key_col_width + GAP;
+            let max_desc_g = inner_w.saturating_sub(2 * HORIZONTAL_PAD + key_col_width + GAP);
+            let truncated_desc = truncate_popup_graphemes(desc, max_desc_g);
+            for (gi, grapheme) in truncated_desc.graphemes(true).enumerate() {
+                self.print(
+                    &Position {
+                        line: row,
+                        offset: desc_start + gi,
+                    },
+                    Style::Default,
+                    text_colors,
+                    grapheme.to_string(),
+                );
+            }
+
+            // Right border
+            self.print(
+                &Position {
+                    line: row,
+                    offset: col0 + box_w - 1,
+                },
+                Style::Default,
+                border_colors,
+                "│",
+            );
+        }
+
+        // Bottom border
+        let last_row = row0 + box_h - 1;
+        self.print(
+            &Position {
+                line: last_row,
+                offset: col0,
+            },
+            Style::Default,
+            border_colors,
+            "╰",
+        );
+        for c in 1..box_w.saturating_sub(1) {
+            self.print(
+                &Position {
+                    line: last_row,
+                    offset: col0 + c,
+                },
+                Style::Default,
+                border_colors,
+                "─",
+            );
+        }
+        self.print(
+            &Position {
+                line: last_row,
+                offset: col0 + box_w - 1,
+            },
+            Style::Default,
+            border_colors,
+            "╯",
+        );
     }
 }
 

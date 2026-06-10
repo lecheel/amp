@@ -115,3 +115,31 @@ pending_delete:
     - buffer::delete_token
     - application::switch_to_normal_mode
 ```
+
+
+which-key
+
+| File | Change |
+|------|--------|
+| `input/mod.rs` | Added `Key::display()` for human-readable key labels |
+| `input/key_map/mod.rs` | Added `REVERSE_COMMAND_MAP` (LazyLock), `format_command_name`, `is_housekeeping_command`, `KeyMap::which_key_entries`, `KeyMap::which_key_leader_entries` |
+| `view/presenter.rs` | Added `print_which_key_popup(title, entries)` — renders a bottom-right bordered popup with key→description rows, min 30 chars wide, max 10 rows |
+| `models/application/mod.rs` | Changed `Mode::PendingLeader(_)` to `Mode::PendingLeader(ref mut mode)` in `present()` to pass mode data to presenter |
+| `presenters/modes/pending_leader.rs` | Updated signature to accept `&PendingLeaderMode`, shows leader tree entries filtered by pressed keys, title shows pressed sequence |
+| `presenters/modes/pending_delete.rs` | Shows which-key popup with `pending_delete` mode bindings |
+| `presenters/modes/pending_yank.rs` | Shows which-key popup with `pending_yank` mode bindings |
+| `presenters/modes/pending_change.rs` | Shows which-key popup with `pending_change` mode bindings |
+| `presenters/modes/pending_left_bracket.rs` | Shows which-key popup with `pending_left_bracket` mode bindings |
+| `presenters/modes/pending_right_bracket.rs` | Shows which-key popup with `pending_right_bracket` mode bindings |
+
+The which-key popup:
+
+Appears in the bottom-right corner above the status line
+Is minimum 30 characters wide, auto-sizing to content
+Auto-filters based on pressed keys (leader mode traverses the tree, pending modes show only valid next keys)
+Strips housekeeping commands (switch_to_normal_mode, scroll_to_cursor, handle_input) from descriptions, showing only the meaningful action
+Formats command names by stripping module prefix and converting snake_case → Title Case
+Shows Esc → Cancel specially, and subtree nodes as key → …
+Uses the same visual style as existing popups (dark background, Unicode box drawing, accent-colored keys and titles)
+
+

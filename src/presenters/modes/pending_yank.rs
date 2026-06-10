@@ -8,9 +8,9 @@ pub fn display(workspace: &mut Workspace, view: &mut View, error: &Option<Error>
     let buffer_status = current_buffer_status_line_data(workspace);
     let buf = workspace.current_buffer.as_ref().context(BUFFER_MISSING)?;
     let data = buf.data();
-
-    // Draw the visible set of tokens to the terminal.
     presenter.print_buffer(buf, &data, &workspace.syntax_set, None, None)?;
+
+    let entries = presenter.which_key_entries("pending_yank");
 
     if let Some(e) = error {
         presenter.print_error(&e.to_string());
@@ -19,17 +19,14 @@ pub fn display(workspace: &mut Workspace, view: &mut View, error: &Option<Error>
             StatusLineData {
                 content: " YANK ".to_string(),
                 style: Style::Default,
-                colors: Colors::PinnedQuery, // Blue, to indicate copy/capture
+                colors: Colors::PinnedQuery,
             },
             buffer_status,
         ]);
     }
 
-    // Restore the default cursor, suggesting non-input mode.
+    presenter.print_which_key_popup("yank", &entries);
     presenter.set_cursor_type(CursorType::Block);
-
-    // Render the changes to the screen.
     presenter.present()?;
-
     Ok(())
 }

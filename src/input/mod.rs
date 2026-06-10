@@ -1,7 +1,5 @@
 pub use self::key_map::KeyMap;
-
 pub mod key_map;
-
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Key {
     Backspace,
@@ -34,4 +32,42 @@ pub enum Key {
     F10,
     F11,
     F12,
+}
+
+impl Key {
+    pub fn display(&self) -> String {
+        match self {
+            Key::Char(' ') => "SPC".to_string(),
+            Key::Char(c) => c.to_string(),
+            Key::Ctrl(c) => format!("C-{}", c),
+            Key::Alt(c) => format!("M-{}", c),
+            Key::Backspace => "BS".to_string(),
+            Key::Left => "←".to_string(),
+            Key::Right => "→".to_string(),
+            Key::Up => "↑".to_string(),
+            Key::Down => "↓".to_string(),
+            Key::Home => "Home".to_string(),
+            Key::End => "End".to_string(),
+            Key::PageUp => "PgUp".to_string(),
+            Key::PageDown => "PgDn".to_string(),
+            Key::Delete => "Del".to_string(),
+            Key::Insert => "Ins".to_string(),
+            Key::Esc => "Esc".to_string(),
+            Key::Tab => "Tab".to_string(),
+            Key::Enter => "RET".to_string(),
+            Key::AnyChar => "*".to_string(),
+            Key::F1 => "F1".to_string(),
+            Key::F2 => "F2".to_string(),
+            Key::F3 => "F3".to_string(),
+            Key::F4 => "F4".to_string(),
+            Key::F5 => "F5".to_string(),
+            Key::F6 => "F6".to_string(),
+            Key::F7 => "F7".to_string(),
+            Key::F8 => "F8".to_string(),
+            Key::F9 => "F9".to_string(),
+            Key::F10 => "F10".to_string(),
+            Key::F11 => "F11".to_string(),
+            Key::F12 => "F12".to_string(),
+        }
+    }
 }

@@ -4,6 +4,7 @@ use crate::input::Key;
 use smallvec::SmallVec;
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
+use std::sync::LazyLock;
 use yaml_rust::yaml::{Hash, Yaml, YamlLoader};
 
 pub enum LeaderNode {
@@ -590,5 +591,151 @@ mod tests {
             (command[1] as *const usize),
             (commands::cursor::move_down as *const usize)
         );
+    }
+}
+
+static REVERSE_COMMAND_MAP: LazyLock<HashMap<Command, &'static str>> = LazyLock::new(|| {
+    let mut map = HashMap::new();
+    for (name, cmd) in commands::hash_map() {
+        map.insert(cmd, name);
+    }
+    map
+});
+
+fn format_command_name(name: &str) -> String {
+    // Strip module prefix (e.g., "cursor::move_up" → "move_up")
+    let name = if let Some(pos) = name.rfind("::") {
+        &name[pos + 2..]
+    } else {
+        name
+    };
+    // Convert snake_case to Title Case words
+    name.split('_')
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(first) => first.to_uppercase().to_string() + chars.as_str(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn is_housekeeping_command(name: &str) -> bool {
+    matches!(
+        name,
+        "application::switch_to_normal_mode"
+            | "view::scroll_to_cursor"
+            | "application::handle_input"
+            | "application::switch_to_insert_mode"
+    )
+}
+
+impl KeyMap {
+    /// Returns which-key entries for a mode: (key_display, description)
+    /// Filters out AnyChar and housekeeping commands from descriptions.
+    pub fn which_key_entries(&self, mode: &str) -> Vec<(String, String)> {
+        let mut entries = Vec::new();
+        if let Some(mode_bindings) = self.0.get(mode) {
+            for (key, cmds) in mode_bindings {
+                if matches!(key, Key::AnyChar) {
+                    continue;
+                }
+                let key_display = key.display();
+
+                // Special-case Esc
+                if matches!(key, Key::Esc) {
+                    entries.push((key_display, "Cancel".to_string()));
+                    continue;
+                }
+
+                let primary_descriptions: Vec<String> = cmds
+                    .iter()
+                    .filter_map(|cmd| REVERSE_COMMAND_MAP.get(cmd))
+                    .filter(|name| !is_housekeeping_command(name))
+                    .map(|name| format_command_name(name))
+                    .collect();
+
+                let description = if primary_descriptions.is_empty() {
+                    // Fallback: show first command even if housekeeping
+                    cmds.iter()
+                        .filter_map(|cmd| REVERSE_COMMAND_MAP.get(cmd))
+                        .map(|name| format_command_name(name))
+                        .next()
+                        .unwrap_or_default()
+                } else if primary_descriptions.len() == 1 {
+                    primary_descriptions.into_iter().next().unwrap()
+                } else {
+                    primary_descriptions.join(" → ")
+                };
+
+                if !description.is_empty() {
+                    entries.push((key_display, description));
+                }
+            }
+        }
+        entries.sort_by(|a, b| a.0.cmp(&b.0));
+        entries
+    }
+
+    /// Returns which-key entries for the leader tree at the current depth,
+    /// given the keys pressed so far.
+    pub fn which_key_leader_entries(&self, keys: &[Key]) -> Vec<(String, String)> {
+        let mut entries = Vec::new();
+        let mut current = &self.1;
+
+        // Navigate to current depth
+        for key in keys {
+            match current.get(key) {
+                Some(LeaderNode::Subtree(sub)) => current = sub,
+                _ => return entries,
+            }
+        }
+
+        for (key, node) in current {
+            let key_display = key.display();
+
+            if matches!(key, Key::AnyChar) {
+                continue;
+            }
+
+            if matches!(key, Key::Esc) {
+                entries.push((key_display, "Cancel".to_string()));
+                continue;
+            }
+
+            match node {
+                LeaderNode::Command(cmds) => {
+                    let primary_descriptions: Vec<String> = cmds
+                        .iter()
+                        .filter_map(|cmd| REVERSE_COMMAND_MAP.get(cmd))
+                        .filter(|name| !is_housekeeping_command(name))
+                        .map(|name| format_command_name(name))
+                        .collect();
+
+                    let description = if primary_descriptions.is_empty() {
+                        cmds.iter()
+                            .filter_map(|cmd| REVERSE_COMMAND_MAP.get(cmd))
+                            .map(|name| format_command_name(name))
+                            .next()
+                            .unwrap_or_default()
+                    } else if primary_descriptions.len() == 1 {
+                        primary_descriptions.into_iter().next().unwrap()
+                    } else {
+                        primary_descriptions.join(" → ")
+                    };
+
+                    if !description.is_empty() {
+                        entries.push((key_display, description));
+                    }
+                }
+                LeaderNode::Subtree(_) => {
+                    entries.push((key_display, "…".to_string()));
+                }
+            }
+        }
+        entries.sort_by(|a, b| a.0.cmp(&b.0));
+        entries
     }
 }
