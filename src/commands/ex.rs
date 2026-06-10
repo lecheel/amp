@@ -2,6 +2,7 @@ use crate::commands::{self, Result};
 use crate::errors::*;
 use crate::input::Key;
 use crate::models::application::{Application, Mode};
+use scribe::buffer::Position;
 use std::path::{Path, PathBuf};
 
 pub fn push_char(app: &mut Application) -> Result {
@@ -98,20 +99,47 @@ pub fn apply_completion(app: &mut Application) -> Result {
 }
 
 pub fn accept_input(app: &mut Application) -> Result {
-    // If a completion is selected, apply it before executing
+    // Check for bare number goto-line BEFORE applying completion selection.
+    // This must come first because completions auto-select index 0,
+    // which would clobber a numeric input like ":123".
+    {
+        let raw_input = if let Mode::Ex(ref mode) = app.mode {
+            mode.input.trim_start_matches(':').trim().to_string()
+        } else {
+            bail!("Not in ex mode");
+        };
+        if !raw_input.is_empty() && raw_input.chars().all(|c| c.is_ascii_digit()) {
+            let line_num: usize = raw_input.parse().unwrap();
+            // Clear ex mode state
+            if let Mode::Ex(ref mut mode) = app.mode {
+                mode.input.clear();
+                mode.completions.clear();
+                mode.completion_selection = None;
+            }
+            if let Some(buf) = app.workspace.current_buffer.as_mut() {
+                let target = line_num.saturating_sub(1); // 1-indexed to 0-indexed
+                let max_line = buf.line_count().saturating_sub(1);
+                let line = target.min(max_line);
+                buf.cursor.move_to(Position { line, offset: 0 });
+            }
+            commands::view::scroll_to_cursor(app)?;
+            if matches!(app.mode, Mode::Ex(_)) {
+                commands::application::switch_to_normal_mode(app)?;
+            }
+            return Ok(());
+        }
+    }
+
     if let Mode::Ex(ref mut mode) = app.mode {
         if mode.completion_selection.is_some() {
             mode.apply_selection();
         }
     }
-
     let input = if let Mode::Ex(ref mode) = app.mode {
         mode.input.trim_start_matches(':').trim().to_string()
     } else {
         bail!("Not in ex mode");
     };
-
-    // Parse early so we can intercept :e on a directory
     let parts: Vec<&str> = input.splitn(2, ' ').collect();
     let cmd = parts.get(0).copied().unwrap_or("");
     let arg = parts.get(1).copied().unwrap_or("").trim();
@@ -151,6 +179,22 @@ pub fn accept_input(app: &mut Application) -> Result {
         mode.input.clear();
         mode.completions.clear();
         mode.completion_selection = None;
+    }
+
+    // Handle bare number as goto-line (e.g. :123 → go to line 123)
+    if cmd.parse::<usize>().is_ok() && arg.is_empty() {
+        let line_num: usize = cmd.parse().unwrap();
+        if let Some(buf) = app.workspace.current_buffer.as_mut() {
+            let target = line_num.saturating_sub(1); // 1-indexed to 0-indexed
+            let max_line = buf.line_count().saturating_sub(1);
+            let line = target.min(max_line);
+            buf.cursor.move_to(Position { line, offset: 0 });
+        }
+        commands::view::scroll_to_cursor(app)?;
+        if matches!(app.mode, Mode::Ex(_)) {
+            commands::application::switch_to_normal_mode(app)?;
+        }
+        return Ok(());
     }
 
     // Execute
