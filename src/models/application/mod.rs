@@ -2,6 +2,7 @@ mod buffer_metadata;
 mod buffer_positions;
 mod clipboard;
 mod completion;
+pub mod ctagd;
 mod event;
 pub mod git_gutter;
 pub mod modes;
@@ -65,6 +66,7 @@ pub struct Application {
     pub replaying_change: bool,
     pub popup: Option<(String, Vec<String>)>,
     pub tag_jump_stack: Vec<(PathBuf, Position)>,
+    pub ctagd_available: bool,
 }
 
 impl Application {
@@ -102,10 +104,19 @@ impl Application {
             replaying_change: false,
             popup: None,
             tag_jump_stack: Vec::new(),
+            ctagd_available: ctagd::is_available(),
         };
 
         app.create_modes()?;
         app.apply_saved_positions();
+
+        if app.ctagd_available {
+            if let Some(ref repo) = app.repository {
+                if let Some(repo_path) = repo.workdir() {
+                    ctagd::register_repo(repo_path);
+                }
+            }
+        }
 
         Ok(app)
     }

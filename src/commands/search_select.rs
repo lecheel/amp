@@ -40,9 +40,7 @@ pub fn accept(app: &mut Application) -> Result {
             let target_line = selection.line;
             crate::util::open_buffer(&file_path, app)?;
             if let Some(buf) = app.workspace.current_buffer.as_mut() {
-                let line = target_line
-                    .saturating_sub(1)
-                    .min(buf.line_count().saturating_sub(1));
+                let line = target_line.min(buf.line_count().saturating_sub(1));
                 buf.cursor.move_to(Position { line, offset: 0 });
             }
         }

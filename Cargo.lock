@@ -37,6 +37,7 @@ dependencies = [
  "regex",
  "scribe",
  "serde",
+ "serde_json",
  "serde_yaml",
  "serial_test",
  "signal-hook 0.1.17",

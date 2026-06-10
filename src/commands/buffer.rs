@@ -1,6 +1,7 @@
 use crate::commands::{self, Result};
 use crate::errors::*;
 use crate::input::Key;
+use crate::models::application::ctagd;
 use crate::models::application::{Application, ClipboardContent, Mode, ModeKey, RepeatableAction};
 use crate::util;
 use crate::util::token::{adjacent_token_position, Direction};
@@ -61,6 +62,7 @@ pub fn save(app: &mut Application) -> Result {
         }
     }
 
+    notify_ctagd_saved(app);
     Ok(())
 }
 
@@ -1183,6 +1185,7 @@ pub fn fmt_save(app: &mut Application) -> Result {
             mode.save_on_accept = true;
         }
     }
+    notify_ctagd_saved(app);
 
     Ok(())
 }
@@ -1253,6 +1256,33 @@ pub fn format(app: &mut Application) -> Result {
         } else {
             // Return only the remaining output from the tool
             bail!("{}", final_error);
+        }
+    }
+}
+
+fn notify_ctagd_saved(app: &Application) {
+    if !app.ctagd_available {
+        return;
+    }
+    // Use git repo root as repo_root — ctagd keys sessions on it
+    let repo_root = app
+        .repository
+        .as_ref()
+        .and_then(|repo| repo.workdir().map(|p| p.to_path_buf()));
+    let repo_root = match repo_root {
+        Some(root) => root,
+        None => return, // Not in a git repo, nothing to notify
+    };
+
+    if let Some(buf) = app.workspace.current_buffer.as_ref() {
+        if let Some(ref path) = buf.path {
+            let relative = path
+                .strip_prefix(&repo_root)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .to_string();
+            let content = buf.data().to_string();
+            ctagd::notify_saved(&repo_root, &relative, &content);
         }
     }
 }
