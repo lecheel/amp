@@ -62,6 +62,7 @@ pub struct Application {
     pub last_insert_keys: Vec<Key>,
     pub current_insert_keys: Vec<Key>,
     pub replaying_change: bool,
+    pub popup: Option<(String, Vec<String>)>,
 }
 
 impl Application {
@@ -97,6 +98,7 @@ impl Application {
             last_insert_keys: Vec::new(),
             current_insert_keys: Vec::new(),
             replaying_change: false,
+            popup: None,
         };
 
         app.create_modes()?;
@@ -197,6 +199,9 @@ impl Application {
     fn render(&mut self) -> Result<()> {
         self.view.gutter_statuses = self.compute_gutter_statuses();
 
+        // Take the popup so it's only displayed once
+        let popup = self.popup.take();
+
         let multiline_error = self.error.as_ref().and_then(|err| {
             let s = err.to_string();
 
@@ -234,6 +239,13 @@ impl Application {
             let mut presenter = self.view.build_presenter()?;
             presenter.overlay = true;
             presenter.print_error_box(title, body);
+            presenter.present()?;
+        } else if let Some((title, lines)) = popup {
+            // Display the info popup if one was set
+            let lines_ref: Vec<&str> = lines.iter().map(|s| s.as_str()).collect();
+            let mut presenter = self.view.build_presenter()?;
+            presenter.overlay = true;
+            presenter.print_info_popup(&title, &lines_ref);
             presenter.present()?;
         }
 
@@ -684,8 +696,6 @@ impl Application {
             .insert(ModeKey::Jump, Mode::Jump(JumpMode::new(0)));
         self.modes
             .insert(ModeKey::LineJump, Mode::LineJump(LineJumpMode::new()));
-        self.modes
-            .insert(ModeKey::LineJump, Mode::LineJump(LineJumpMode::new()));
         self.modes.insert(
             ModeKey::Open,
             Mode::Open(OpenMode::new(
@@ -723,7 +733,6 @@ impl Application {
                 self.preferences.borrow().search_select_config(),
             )),
         );
-
         Ok(())
     }
 }

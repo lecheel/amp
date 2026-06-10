@@ -499,6 +499,197 @@ fn insert_buffer_line_before(buffer: &mut scribe::Buffer, line_no: usize, text: 
     buffer.insert(format!("{text}\n"));
 }
 
+pub fn show_hunk_diff(app: &mut Application) -> Result {
+    let diff_lines = get_hunk_diff_lines(app)?;
+    if diff_lines.is_empty() {
+        bail!("No diff to display");
+    }
+    app.popup = Some(("Hunk Diff".to_string(), diff_lines));
+    Ok(())
+}
+
+// NOTE: Changed `Result<Vec<String>>` to `anyhow::Result<Vec<String>>`
+fn get_hunk_diff_lines(app: &Application) -> anyhow::Result<Vec<String>> {
+    let repo = app.repository.as_ref().context("No repository available")?;
+    let buffer = app
+        .workspace
+        .current_buffer
+        .as_ref()
+        .context(BUFFER_MISSING)?;
+    let statuses = line_statuses(repo, buffer).context("Failed to compute git hunk statuses")?;
+    let cursor_line = buffer.cursor.line;
+    let is_changed = |s: &GitGutterStatus| !matches!(s, GitGutterStatus::Unchanged);
+
+    if statuses.get(cursor_line).map_or(true, |s| !is_changed(s)) {
+        bail!("No changed hunk at cursor position");
+    }
+
+    let hunk_start = {
+        let mut s = cursor_line;
+        while s > 0 && statuses.get(s - 1).map_or(false, is_changed) {
+            s -= 1;
+        }
+        s
+    };
+    let hunk_end = {
+        let mut e = cursor_line;
+        while e + 1 < statuses.len() && statuses.get(e + 1).map_or(false, is_changed) {
+            e += 1;
+        }
+        e
+    };
+
+    let path = buffer.path.as_ref().context(BUFFER_PATH_MISSING)?;
+    let workdir = repo
+        .workdir()
+        .context("Repository has no working directory")?;
+    let relative_path = path
+        .strip_prefix(workdir)
+        .context("Failed to build relative buffer path")?;
+    let index = repo.index().context("Failed to get git index")?;
+
+    let old_content: String = match index.get_path(relative_path, 0) {
+        Some(entry) => {
+            let blob = repo
+                .find_blob(entry.id)
+                .context("Failed to find blob in repository")?;
+            String::from_utf8_lossy(blob.content()).into_owned()
+        }
+        None => String::new(),
+    };
+
+    let old_lines: Vec<&str> = if old_content.is_empty() {
+        Vec::new()
+    } else {
+        old_content.lines().collect()
+    };
+    let new_content = buffer.data();
+    let new_lines: Vec<&str> = new_content.lines().collect();
+
+    let ops = build_diff_ops(&old_lines, &new_lines);
+
+    let context = 3;
+    let display_new_start = hunk_start.saturating_sub(context);
+    let display_new_end = (hunk_end + context).min(new_lines.len().saturating_sub(1));
+
+    let mut start_idx = None;
+    let mut end_idx = None;
+
+    for (i, op) in ops.iter().enumerate() {
+        let nj = match op {
+            DiffOp::Keep(_, nj) => Some(*nj),
+            DiffOp::Insert(nj) => Some(*nj),
+            DiffOp::Delete(_) => None,
+        };
+
+        if let Some(n) = nj {
+            if n >= display_new_start && start_idx.is_none() {
+                let mut s = i;
+                while s > 0 && matches!(ops[s - 1], DiffOp::Delete(_)) {
+                    s -= 1;
+                }
+                start_idx = Some(s);
+            }
+            if n <= display_new_end {
+                end_idx = Some(i);
+            } else {
+                break;
+            }
+        }
+    }
+
+    if let Some(mut e) = end_idx {
+        while e + 1 < ops.len() && matches!(ops[e + 1], DiffOp::Delete(_)) {
+            e += 1;
+        }
+        end_idx = Some(e);
+    }
+
+    let start_idx = start_idx.unwrap_or(0);
+    let end_idx = end_idx.unwrap_or(ops.len().saturating_sub(1));
+
+    if start_idx > end_idx {
+        return Ok(Vec::new());
+    }
+
+    let mut diff_lines = Vec::new();
+    let path_str = relative_path.to_string_lossy();
+    diff_lines.push(format!("--- a/{}", path_str));
+    diff_lines.push(format!("+++ b/{}", path_str));
+
+    let mut old_start = 1;
+    let mut new_start = 1;
+    let mut old_count = 0;
+    let mut new_count = 0;
+    let mut found_old = false;
+    let mut found_new = false;
+
+    for i in start_idx..=end_idx {
+        match ops[i] {
+            DiffOp::Keep(oi, nj) => {
+                if !found_old {
+                    old_start = oi + 1;
+                    found_old = true;
+                }
+                if !found_new {
+                    new_start = nj + 1;
+                    found_new = true;
+                }
+                old_count += 1;
+                new_count += 1;
+            }
+            DiffOp::Delete(oi) => {
+                if !found_old {
+                    old_start = oi + 1;
+                    found_old = true;
+                }
+                old_count += 1;
+            }
+            DiffOp::Insert(nj) => {
+                if !found_new {
+                    new_start = nj + 1;
+                    found_new = true;
+                }
+                new_count += 1;
+            }
+        }
+    }
+
+    if !found_old {
+        old_start = 0;
+    }
+    if !found_new {
+        new_start = 0;
+    }
+    if old_lines.is_empty() {
+        old_start = 0;
+    }
+    if new_lines.is_empty() {
+        new_start = 0;
+    }
+
+    diff_lines.push(format!(
+        "@@ -{},{} +{},{} @@",
+        old_start, old_count, new_start, new_count
+    ));
+
+    for i in start_idx..=end_idx {
+        match ops[i] {
+            DiffOp::Keep(oi, _) => {
+                diff_lines.push(format!(" {}", old_lines[oi]));
+            }
+            DiffOp::Delete(oi) => {
+                diff_lines.push(format!("-{}", old_lines[oi]));
+            }
+            DiffOp::Insert(nj) => {
+                diff_lines.push(format!("+{}", new_lines[nj]));
+            }
+        }
+    }
+
+    Ok(diff_lines)
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
