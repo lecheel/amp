@@ -10,6 +10,7 @@ pub mod normal;
 pub mod open;
 pub mod paste;
 pub mod path;
+pub mod pending_g;
 pub mod pending_change;
 pub mod pending_delete;
 pub mod pending_leader;

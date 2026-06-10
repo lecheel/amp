@@ -152,6 +152,11 @@ pub fn switch_to_pending_leader_mode(app: &mut Application) -> Result {
     Ok(())
 }
 
+pub fn switch_to_pending_g_mode(app: &mut Application) -> Result {
+    app.switch_to(ModeKey::PendingG);
+    Ok(())
+}
+
 pub fn switch_to_ex_mode(app: &mut Application) -> Result {
     app.switch_to(ModeKey::Ex);
     if let Mode::Ex(ref mut mode) = app.mode {

@@ -369,6 +369,11 @@ impl Application {
                 &mut self.view,
                 &self.error,
             ),
+            Mode::PendingG(_) => presenters::modes::pending_g::display(
+                &mut self.workspace,
+                &mut self.view,
+                &self.error,
+            ),
             Mode::PendingChange(_) => presenters::modes::pending_change::display(
                 &mut self.workspace,
                 &mut self.view,
@@ -597,6 +602,7 @@ impl Application {
             Mode::Insert => Some("insert"),
             Mode::Jump(_) => Some("jump"),
             Mode::LineJump(_) => Some("line_jump"),
+            Mode::PendingG(_) => Some("pending_g"),
             Mode::PendingChange(_) => Some("pending_change"),
             Mode::PendingDelete(_) => Some("pending_delete"),
             Mode::PendingYank(_) => Some("pending_yank"),
@@ -681,6 +687,8 @@ impl Application {
             ModeKey::Leader,
             Mode::PendingLeader(PendingLeaderMode::new()),
         );
+        self.modes
+            .insert(ModeKey::PendingG, Mode::PendingG(PendingGMode::new()));
         self.modes.insert(
             ModeKey::PendingChange,
             Mode::PendingChange(PendingChangeMode::new()),

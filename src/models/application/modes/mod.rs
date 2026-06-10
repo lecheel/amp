@@ -49,6 +49,7 @@ pub enum Mode {
     PendingLeftBracket(PendingLeftBracketMode),
     PendingRightBracket(PendingRightBracketMode),
     PendingYank(PendingYankMode),
+    PendingG(PendingGMode),
     PendingLeader(PendingLeaderMode),
     Search(SearchMode),
     Select(SelectMode),
@@ -82,6 +83,7 @@ pub enum ModeKey {
     PendingLeftBracket,
     PendingRightBracket,
     PendingYank,
+    PendingG,
     Leader,
     Search,
     Select,
@@ -111,6 +113,21 @@ pub use self::theme::ThemeMode;
 use crate::input::Key;
 
 // Pending mode types
+
+#[derive(Default)]
+pub struct PendingGMode;
+
+impl PendingGMode {
+    pub fn new() -> PendingGMode {
+        PendingGMode::default()
+    }
+}
+
+impl fmt::Display for PendingGMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "GO")
+    }
+}
 
 #[derive(Default)]
 pub struct PendingLeaderMode {

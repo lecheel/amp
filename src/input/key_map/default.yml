@@ -104,6 +104,19 @@ ex:
   ctrl-n: ex::select_next_completion
   ctrl-p: ex::select_previous_completion  
 
+pending_g:
+  g: cursor::move_to_first_line
+  l: application::switch_to_line_jump_mode
+  h: cursor::move_to_previous_hunk
+  n: cursor::move_to_next_hunk
+  r: git::revert_hunk
+  d: git::show_hunk_diff
+  t: tag::tag_under_cursor
+  escape: application::switch_to_normal_mode
+  _:
+    - application::switch_to_normal_mode
+    - application::handle_input
+
 pending_delete:
   $:
     - buffer::delete_rest_of_line

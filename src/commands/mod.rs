@@ -93,6 +93,10 @@ pub fn hash_map() -> HashMap<&'static str, Command> {
         "application::open_under_cursor",
         application::open_under_cursor,
     );
+    map.insert(
+        "application::switch_to_pending_g_mode",
+        application::switch_to_pending_g_mode,
+    );
 
     // Block selection commands (ensure registration even if build script misses them)
     map.insert(
