@@ -24,6 +24,7 @@ pub mod search;
 pub mod search_select;
 pub mod select_block;
 pub mod selection;
+pub mod tag;
 pub mod view;
 pub mod workspace;
 
@@ -34,6 +35,9 @@ pub fn hash_map() -> HashMap<&'static str, Command> {
     let mut map: HashMap<&'static str, Command> = include!(concat!(env!("OUT_DIR"), "/hash_map"));
 
     map.insert("application::nop", application::nop);
+    map.insert("tag::tag_under_cursor", tag::tag_under_cursor);
+    map.insert("tag::tag_back", tag::tag_back);
+    map.insert("tag::gentags", tag::gentags);
     map.insert("buffer_list::accept", buffer_list::accept);
     map.insert(
         "application::switch_to_buffer_list_mode",

@@ -16,6 +16,7 @@ pub mod select_block;
 mod select_line;
 mod symbol_jump;
 mod syntax;
+pub mod tag_jump;
 mod theme;
 
 pub use self::buffer_list::BufferListMode;
@@ -24,6 +25,7 @@ pub use self::fd::FdMode;
 pub use self::file_picker::FilePickerMode;
 pub use self::mru::MRUMode;
 pub use self::select_block::{BlockInsertMode, SelectBlockMode};
+pub use self::tag_jump::TagJumpMode;
 use std::fmt;
 
 pub enum Mode {
@@ -32,6 +34,7 @@ pub enum Mode {
     Exit,
     Fd(FdMode),
     FilePicker(FilePickerMode),
+    TagJump(TagJumpMode),
     Insert,
     Jump(JumpMode),
     LineJump(LineJumpMode),
@@ -84,6 +87,7 @@ pub enum ModeKey {
     Select,
     SelectLine,
     SymbolJump,
+    TagJump,
     Syntax,
     Theme,
     MRU,

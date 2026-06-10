@@ -167,6 +167,14 @@ pub fn accept_input(app: &mut Application) -> Result {
         "cn" => commands::rg::next_result(app)?,
         "cp" => commands::rg::prev_result(app)?,
         "fd" => commands::fd::switch_to_fd_mode(app, arg)?,
+        "gentags" => commands::tag::gentags(app)?,
+        "tag" | "ta" => {
+            if arg.is_empty() {
+                bail!("No tag specified for :tag. Usage: :tag <name>");
+            } else {
+                commands::tag::tag(app, arg)?;
+            }
+        }
         "last_rg" => commands::rg::switch_to_last_rg(app)?,
         "e" => {
             if arg.is_empty() {

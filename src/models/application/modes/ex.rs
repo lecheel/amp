@@ -105,6 +105,8 @@ impl ExMode {
                 (":ls", ":ls"),
                 (":rg ", ":rg "),
                 (":last_rg", ":last_rg"),
+                (":tag ", ":tag "),
+                (":gentags", ":gentags"),
                 (":cn", ":cn"),
                 (":cp", ":cp"),
             ];

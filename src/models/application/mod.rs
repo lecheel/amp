@@ -16,6 +16,7 @@ pub use self::clipboard::ClipboardContent;
 pub use self::completion::{CompletionOrigin, CompletionState};
 pub use self::event::Event;
 pub use self::git_gutter::GitGutterStatus;
+pub use self::modes::TagJumpMode;
 pub use self::modes::{Mode, ModeKey};
 pub use self::preferences::Preferences;
 pub use self::repeat_action::RepeatableAction;
@@ -63,6 +64,7 @@ pub struct Application {
     pub current_insert_keys: Vec<Key>,
     pub replaying_change: bool,
     pub popup: Option<(String, Vec<String>)>,
+    pub tag_jump_stack: Vec<(PathBuf, Position)>,
 }
 
 impl Application {
@@ -99,6 +101,7 @@ impl Application {
             current_insert_keys: Vec::new(),
             replaying_change: false,
             popup: None,
+            tag_jump_stack: Vec::new(),
         };
 
         app.create_modes()?;
@@ -278,6 +281,12 @@ impl Application {
                 &self.error,
             ),
             Mode::FilePicker(ref mut mode) => presenters::modes::file_picker::display(
+                &mut self.workspace,
+                mode,
+                &mut self.view,
+                &self.error,
+            ),
+            Mode::TagJump(ref mut mode) => presenters::modes::search_select::display(
                 &mut self.workspace,
                 mode,
                 &mut self.view,
@@ -525,6 +534,13 @@ impl Application {
                     Some("search_select")
                 }
             }
+            Mode::TagJump(ref mode) => {
+                if mode.insert_mode() {
+                    Some("search_select_insert")
+                } else {
+                    Some("search_select")
+                }
+            }
             Mode::BufferList(ref mode) => {
                 if mode.insert_mode() {
                     Some("search_select_insert")
@@ -626,6 +642,12 @@ impl Application {
         self.modes.insert(
             ModeKey::FilePicker,
             Mode::FilePicker(FilePickerMode::new(
+                self.preferences.borrow().search_select_config(),
+            )),
+        );
+        self.modes.insert(
+            ModeKey::TagJump,
+            Mode::TagJump(TagJumpMode::new(
                 self.preferences.borrow().search_select_config(),
             )),
         );
