@@ -142,4 +142,17 @@ Formats command names by stripping module prefix and converting snake_case → T
 Shows Esc → Cancel specially, and subtree nodes as key → …
 Uses the same visual style as existing popups (dark background, Unicode box drawing, accent-colored keys and titles)
 
+Add pending_g: session
 
+pending_g:
+  g: cursor::move_to_first_line
+  l: application::switch_to_line_jump_mode
+  h: cursor::move_to_previous_hunk
+  n: cursor::move_to_next_hunk
+  r: git::revert_hunk
+  d: git::show_hunk_diff
+  t: tag::tag_under_cursor
+  escape: application::switch_to_normal_mode
+  _:
+    - application::switch_to_normal_mode
+    - application::handle_input
