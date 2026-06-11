@@ -1,6 +1,7 @@
 use crate::commands::{self, Result};
 use crate::errors::*;
 use crate::input::key_map::LeaderLookup;
+use crate::input::Key;
 use crate::input::KeyMap;
 use crate::models::application::modes::open::DisplayablePath;
 use crate::models::application::BufferPosition;
@@ -20,6 +21,42 @@ pub fn handle_input(app: &mut Application) -> Result {
             return Ok(());
         }
         // Key wasn't consumed → popup dismissed; fall through to mode keymap.
+    }
+
+    // --- Sed diff buffer key overrides ---
+    let is_sed_diff = app
+        .workspace
+        .current_buffer
+        .as_ref()
+        .map(|buf| app.view.buffer_registry.is_sed_diff(buf.id))
+        .unwrap_or(false);
+
+    if is_sed_diff {
+        if let Some(ref key) = app.view.last_key {
+            match key {
+                Key::Char('w') => {
+                    crate::commands::sed::apply(app)?;
+                    return Ok(());
+                }
+                Key::Char(' ') => {
+                    crate::commands::sed::toggle(app)?;
+                    return Ok(());
+                }
+                Key::Char('a') => {
+                    crate::commands::sed::toggle_all(app)?;
+                    return Ok(());
+                }
+                Key::Char('q') => {
+                    app.sed_changes.clear();
+                    app.sed_originals.clear();
+                    crate::commands::buffer::close(app)?;
+                    return Ok(());
+                }
+                _ => {
+                    // All other keys (dd, j, k, G, etc.) fall through
+                }
+            }
+        }
     }
 
     let commands = app.view.last_key().as_ref().and_then(|key| {

@@ -59,10 +59,9 @@ impl BufferRegistry {
             .map_or(false, |m| m.buffer_type == BufferType::Readonly)
     }
 
-    /// Returns true if the buffer can be edited by the user.
-    /// Unregistered buffers default to editable (Normal).
     pub fn is_editable(&self, id: Option<usize>) -> bool {
-        self.get(id)
-            .map_or(true, |m| m.buffer_type == BufferType::Normal)
+        self.get(id).map_or(true, |m| {
+            matches!(m.buffer_type, BufferType::Normal | BufferType::SedDiff)
+        })
     }
 }

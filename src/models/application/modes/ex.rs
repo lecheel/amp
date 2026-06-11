@@ -108,6 +108,7 @@ impl ExMode {
                 (":tag ", ":tag "),
                 (":gentags", ":gentags"),
                 (":sed ", ":sed "),
+                (":sed -w ", ":sed -w "),
                 (":cn", ":cn"),
                 (":cp", ":cp"),
             ];

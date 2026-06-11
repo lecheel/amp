@@ -8,6 +8,7 @@ pub mod git_gutter;
 pub mod modes;
 mod preferences;
 mod repeat_action;
+mod sed_change;
 mod syntax_loader;
 
 // Published API
@@ -21,6 +22,7 @@ pub use self::modes::TagJumpMode;
 pub use self::modes::{Mode, ModeKey};
 pub use self::preferences::Preferences;
 pub use self::repeat_action::RepeatableAction;
+pub use self::sed_change::SedChange;
 
 use self::clipboard::Clipboard;
 use self::modes::MRUMode;
@@ -67,7 +69,8 @@ pub struct Application {
     pub popup: Option<(String, Vec<String>)>,
     pub tag_jump_stack: Vec<(PathBuf, Position)>,
     pub ctagd_available: bool,
-    pub sed_replacements: HashMap<PathBuf, String>,
+    pub sed_changes: Vec<SedChange>,
+    pub sed_originals: std::collections::HashMap<PathBuf, String>,
 }
 
 impl Application {
@@ -106,7 +109,8 @@ impl Application {
             popup: None,
             tag_jump_stack: Vec::new(),
             ctagd_available: ctagd::is_available(),
-            sed_replacements: HashMap::new(),
+            sed_changes: Vec::new(),
+            sed_originals: std::collections::HashMap::new(),
         };
 
         app.create_modes()?;

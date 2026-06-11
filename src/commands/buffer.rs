@@ -20,9 +20,6 @@ pub fn save(app: &mut Application) -> Result {
     if !app.view.buffer_registry.is_editable(buf.id) {
         bail!("This buffer cannot be saved");
     }
-    if app.view.buffer_registry.is_sed_diff(buf.id) {
-        return crate::commands::sed::apply(app);
-    }
     remove_trailing_whitespace(app)?;
     ensure_trailing_newline(app)?;
 
