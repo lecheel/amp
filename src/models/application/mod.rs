@@ -67,6 +67,7 @@ pub struct Application {
     pub popup: Option<(String, Vec<String>)>,
     pub tag_jump_stack: Vec<(PathBuf, Position)>,
     pub ctagd_available: bool,
+    pub sed_replacements: HashMap<PathBuf, String>,
 }
 
 impl Application {
@@ -105,6 +106,7 @@ impl Application {
             popup: None,
             tag_jump_stack: Vec::new(),
             ctagd_available: ctagd::is_available(),
+            sed_replacements: HashMap::new(),
         };
 
         app.create_modes()?;

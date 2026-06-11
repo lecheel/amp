@@ -22,10 +22,12 @@ pub mod repeat;
 pub mod rg;
 pub mod search;
 pub mod search_select;
+pub mod sed;
 pub mod select_block;
 pub mod selection;
 pub mod tag;
 pub mod view;
+
 pub mod workspace;
 
 pub type Command = fn(&mut Application) -> Result;
@@ -117,6 +119,5 @@ pub fn hash_map() -> HashMap<&'static str, Command> {
         select_block::copy_and_delete,
     );
     map.insert("select_block::change", select_block::change);
-
     map
 }

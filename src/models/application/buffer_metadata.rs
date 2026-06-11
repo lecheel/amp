@@ -13,6 +13,7 @@ pub enum BufferType {
     /// Readonly buffer. User cannot edit or save. Never shows as modified.
     /// May or may not have file backing.
     Readonly,
+    SedDiff,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -31,6 +32,11 @@ impl BufferRegistry {
         if let Some(id) = id {
             self.entries.insert(id, meta);
         }
+    }
+
+    pub fn is_sed_diff(&self, id: Option<usize>) -> bool {
+        self.get(id)
+            .map_or(false, |m| m.buffer_type == BufferType::SedDiff)
     }
 
     pub fn unregister(&mut self, id: Option<usize>) {
