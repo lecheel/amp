@@ -15,7 +15,8 @@ pub enum LeaderNode {
 pub struct KeyMap(
     HashMap<String, HashMap<Key, SmallVec<[Command; 4]>>>,
     HashMap<Key, LeaderNode>, // leader tree, field .1
-    HashMap<Key, LeaderNode>,
+    HashMap<Key, LeaderNode>, // pending_delete
+    HashMap<Key, LeaderNode>, // pending_g
 );
 
 impl KeyMap {
@@ -60,7 +61,8 @@ impl KeyMap {
         let mut keymap = HashMap::new();
         let commands = commands::hash_map();
         let mut leader_tree = HashMap::new();
-        let mut pending_delete_tree = HashMap::new(); // ← NEW
+        let mut pending_delete_tree = HashMap::new();
+        let mut pending_g_tree = HashMap::new();
         for (yaml_mode, yaml_key_bindings) in keymap_data {
             let mode = yaml_mode.as_str().context("Mode key must be a string")?;
             if mode == "leader" {
@@ -68,15 +70,47 @@ impl KeyMap {
                 continue;
             }
             if mode == "pending_delete" {
-                // ← NEW
                 pending_delete_tree = parse_leader_tree(yaml_key_bindings, &commands)?;
+                continue;
+            }
+            if mode == "pending_g" {
+                pending_g_tree = parse_leader_tree(yaml_key_bindings, &commands)?;
                 continue;
             }
             let key_bindings = parse_mode_key_bindings(yaml_key_bindings, &commands)
                 .with_context(|| format!("Failed to parse keymaps for \"{mode}\" mode"))?;
             keymap.insert(mode.to_string(), key_bindings);
         }
-        Ok(KeyMap(keymap, leader_tree, pending_delete_tree)) // ← UPDATED
+
+        Ok(KeyMap(
+            keymap,
+            leader_tree,
+            pending_delete_tree,
+            pending_g_tree,
+        ))
+    }
+
+    pub fn pending_g_lookup(&self, keys: &[Key]) -> LeaderLookup {
+        let mut current = &self.3;
+        for (i, key) in keys.iter().enumerate() {
+            match current.get(key) {
+                None => return LeaderLookup::NoMatch,
+                Some(LeaderNode::Command(cmds)) => {
+                    if i == keys.len() - 1 {
+                        return LeaderLookup::Found(cmds.clone());
+                    } else {
+                        return LeaderLookup::NoMatch;
+                    }
+                }
+                Some(LeaderNode::Subtree(sub)) => {
+                    if i == keys.len() - 1 {
+                        return LeaderLookup::Prefix;
+                    }
+                    current = sub;
+                }
+            }
+        }
+        LeaderLookup::Prefix
     }
 
     pub fn pending_delete_lookup(&self, keys: &[Key]) -> LeaderLookup {
@@ -174,6 +208,8 @@ impl KeyMap {
         merge_leader_tree(&mut self.1, key_map.1);
         // Deep-merge pending_delete tree
         merge_leader_tree(&mut self.2, key_map.2);
+        // Deep-merge pending_g
+        merge_leader_tree(&mut self.3, key_map.3);
     }
 }
 
@@ -725,6 +761,56 @@ impl KeyMap {
 
                 if !description.is_empty() {
                     entries.push((key_display, description));
+                }
+            }
+        }
+        entries.sort_by(|a, b| a.0.cmp(&b.0));
+        entries
+    }
+
+    pub fn which_key_pending_g_entries(&self, keys: &[Key]) -> Vec<(String, String)> {
+        let mut entries = Vec::new();
+        let mut current = &self.3;
+        for key in keys {
+            match current.get(key) {
+                Some(LeaderNode::Subtree(sub)) => current = sub,
+                _ => return entries,
+            }
+        }
+        for (key, node) in current {
+            let key_display = key.display();
+            if matches!(key, Key::AnyChar) {
+                continue;
+            }
+            if matches!(key, Key::Esc) {
+                entries.push((key_display, "Cancel".to_string()));
+                continue;
+            }
+            match node {
+                LeaderNode::Command(cmds) => {
+                    let primary_descriptions: Vec<String> = cmds
+                        .iter()
+                        .filter_map(|cmd| REVERSE_COMMAND_MAP.get(cmd))
+                        .filter(|name| !is_housekeeping_command(name))
+                        .map(|name| format_command_name(name))
+                        .collect();
+                    let description = if primary_descriptions.is_empty() {
+                        cmds.iter()
+                            .filter_map(|cmd| REVERSE_COMMAND_MAP.get(cmd))
+                            .map(|name| format_command_name(name))
+                            .next()
+                            .unwrap_or_default()
+                    } else if primary_descriptions.len() == 1 {
+                        primary_descriptions.into_iter().next().unwrap()
+                    } else {
+                        primary_descriptions.join(" → ")
+                    };
+                    if !description.is_empty() {
+                        entries.push((key_display, description));
+                    }
+                }
+                LeaderNode::Subtree(_) => {
+                    entries.push((key_display, "…".to_string()));
                 }
             }
         }

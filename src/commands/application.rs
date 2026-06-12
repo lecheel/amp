@@ -100,6 +100,13 @@ pub fn handle_input(app: &mut Application) -> Result {
         }
     }
 
+    if let Mode::PendingG(_) = app.mode {
+        if app.view.last_key().is_some() {
+            pending_g_push_key(app)?;
+            return Ok(());
+        }
+    }
+
     let commands = app.view.last_key().as_ref().and_then(|key| {
         app.mode_str()
             .and_then(|mode| app.preferences.borrow().keymap().commands_for(mode, key))
@@ -583,6 +590,40 @@ pub fn display_available_commands(app: &mut Application) -> Result {
     Ok(())
 }
 
+pub fn pending_g_push_key(app: &mut Application) -> Result {
+    let key = match app.view.last_key.clone() {
+        Some(k) => k,
+        None => return Ok(()),
+    };
+    if let Mode::PendingG(ref mut mode) = app.mode {
+        mode.keys.push(key);
+    }
+    let keys = match app.mode {
+        Mode::PendingG(ref mode) => mode.keys.clone(),
+        _ => return Ok(()),
+    };
+    let lookup_result = app.preferences.borrow().keymap().pending_g_lookup(&keys);
+    match lookup_result {
+        LeaderLookup::Found(cmds) => {
+            if let Mode::PendingG(ref mut m) = app.mode {
+                m.reset();
+            }
+            switch_to_normal_mode(app)?;
+            for cmd in cmds {
+                cmd(app)?;
+            }
+        }
+        LeaderLookup::Prefix => {}
+        LeaderLookup::NoMatch => {
+            if let Mode::PendingG(ref mut m) = app.mode {
+                m.reset();
+            }
+            switch_to_normal_mode(app)?;
+        }
+    }
+    Ok(())
+}
+
 pub fn pending_delete_push_key(app: &mut Application) -> Result {
     let key = match app.view.last_key.clone() {
         Some(k) => k,
@@ -591,6 +632,7 @@ pub fn pending_delete_push_key(app: &mut Application) -> Result {
     if let Mode::PendingDelete(ref mut mode) = app.mode {
         mode.keys.push(key);
     }
+
     let keys = match app.mode {
         Mode::PendingDelete(ref mode) => mode.keys.clone(),
         _ => return Ok(()),

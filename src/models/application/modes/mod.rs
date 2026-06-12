@@ -115,11 +115,16 @@ use crate::input::Key;
 // Pending mode types
 
 #[derive(Default)]
-pub struct PendingGMode;
+pub struct PendingGMode {
+    pub keys: Vec<Key>,
+}
 
 impl PendingGMode {
     pub fn new() -> PendingGMode {
-        PendingGMode::default()
+        PendingGMode { keys: Vec::new() }
+    }
+    pub fn reset(&mut self) {
+        self.keys.clear();
     }
 }
 

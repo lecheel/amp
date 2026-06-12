@@ -432,8 +432,9 @@ impl Application {
                 &mut self.view,
                 &self.error,
             ),
-            Mode::PendingG(_) => presenters::modes::pending_g::display(
+            Mode::PendingG(ref mode) => presenters::modes::pending_g::display(
                 &mut self.workspace,
+                mode,
                 &mut self.view,
                 &self.repository,
                 &self.error,
