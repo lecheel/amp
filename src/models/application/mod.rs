@@ -301,6 +301,20 @@ impl Application {
     fn compute_gutter_statuses(&self) -> Option<Vec<GitGutterStatus>> {
         let buffer = self.workspace.current_buffer.as_ref()?;
         let repo = self.repository.as_ref()?;
+
+        // Skip untracked files — every line would show as "Added", which is useless noise
+        if let Some(ref path) = buffer.path {
+            if let Some(workdir) = repo.workdir() {
+                if let Ok(relative_path) = path.strip_prefix(workdir) {
+                    if let Ok(status) = repo.status_file(relative_path) {
+                        if status.contains(git2::Status::WT_NEW) {
+                            return None;
+                        }
+                    }
+                }
+            }
+        }
+
         git_gutter::line_statuses(repo, buffer).ok()
     }
 
