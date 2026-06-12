@@ -157,3 +157,38 @@ pending_g:
     - application::switch_to_normal_mode
     - application::handle_input
 ```
+
+Summary of Implemented Feature: :gs (Git Status Buffer)
+Core Concept
+A virtual buffer (like rg and sed) that displays git status, branches, and stash — with interactive keybindings to stage/unstage files and open them.
+
+src/models/application/buffer_metadata.rs	Added GitStatus variant to BufferType enum + is_git_status() method on BufferRegistry
+src/commands/git_status.rs	New file — all git status logic
+src/commands/mod.rs	Added pub mod git_status; + registered 4 commands in hash_map()
+src/commands/application.rs	Added key interception block for git status buffer in handle_input() + updated open_under_cursor() dispatch
+src/commands/ex.rs	Added "gs" match arm to accept_input()
+
+What :gs Shows
+The buffer displays:
+
+Current branch name
+Staged files (from git status --short, index column)
+Unstaged files (worktree column)
+Untracked files (?? entries)
+"Nothing to commit" message when clean
+Top 5 branches (sorted by most recent committer date)
+Key Bindings (active only in git status buffer)
+Key
+Action
+Description
+s	git_status::stage_file	In Staged section → git reset HEAD -- <path> (unstage). In Unstaged/Untracked → git add <path> (stage). Auto-refreshes buffer afterward, repositions cursor on same file
+z	git_status::show_stash	Runs git stash list, shows up to 10 entries as a popup overlay
+enter	git_status::open_under_cursor	Parses the file path from the current line, opens it in the editor
+q	buffer::close	Closes the git status buffer
+r	git_status::show	Refreshes/re-runs git status
+j/k	(falls through to normal keymap)	Cursor navigation
+
+Buffer is created with virtual path [Git Status] and registered as BufferType::GitStatus
+In handle_input(), before the normal keymap lookup, we check is_git_status(buf.id)
+If true, intercept s, z, enter, q, r keys; all other keys fall through to normal mode bindings
+The open_under_cursor() dispatch in application.rs was also updated so that pressing enter in normal mode (which normally triggers switch_to_symbol_jump_mode) routes to git_status::open_under_cursor when the buffer path is [Git Status], matching the existing pattern for [Ripgrep Results].

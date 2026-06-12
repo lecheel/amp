@@ -1,5 +1,3 @@
-//--+ src/models/application/buffer_metadata.rs
-
 use std::collections::HashMap;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -14,6 +12,7 @@ pub enum BufferType {
     /// May or may not have file backing.
     Readonly,
     SedDiff,
+    GitStatus,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -37,6 +36,11 @@ impl BufferRegistry {
     pub fn is_sed_diff(&self, id: Option<usize>) -> bool {
         self.get(id)
             .map_or(false, |m| m.buffer_type == BufferType::SedDiff)
+    }
+
+    pub fn is_git_status(&self, id: Option<usize>) -> bool {
+        self.get(id)
+            .map_or(false, |m| m.buffer_type == BufferType::GitStatus)
     }
 
     pub fn unregister(&mut self, id: Option<usize>) {

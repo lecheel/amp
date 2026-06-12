@@ -59,6 +59,40 @@ pub fn handle_input(app: &mut Application) -> Result {
         }
     }
 
+    let is_git_status = app
+        .workspace
+        .current_buffer
+        .as_ref()
+        .map(|buf| app.view.buffer_registry.is_git_status(buf.id))
+        .unwrap_or(false);
+    if is_git_status {
+        if let Some(ref key) = app.view.last_key {
+            match key {
+                Key::Char('s') => {
+                    crate::commands::git_status::stage_file(app)?;
+                    return Ok(());
+                }
+                Key::Char('z') => {
+                    crate::commands::git_status::show_stash(app)?;
+                    return Ok(());
+                }
+                Key::Enter => {
+                    crate::commands::git_status::open_under_cursor(app)?;
+                    return Ok(());
+                }
+                Key::Char('q') => {
+                    crate::commands::buffer::close(app)?;
+                    return Ok(());
+                }
+                Key::Char('r') => {
+                    crate::commands::git_status::show(app)?;
+                    return Ok(());
+                }
+                _ => {}
+            }
+        }
+    }
+
     let commands = app.view.last_key().as_ref().and_then(|key| {
         app.mode_str()
             .and_then(|mode| app.preferences.borrow().keymap().commands_for(mode, key))
@@ -133,6 +167,7 @@ pub fn open_under_cursor(app: &mut Application) -> Result {
         .map(|p| p.to_string_lossy().into_owned());
     match buffer_path.as_deref() {
         Some("[Ripgrep Results]") => commands::rg::open_under_cursor(app),
+        Some("[Git Status]") => commands::git_status::open_under_cursor(app),
         _ => commands::application::switch_to_symbol_jump_mode(app),
     }
 }

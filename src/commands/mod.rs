@@ -12,6 +12,7 @@ pub mod ex;
 pub mod fd;
 pub mod file_picker;
 pub mod git;
+pub mod git_status;
 pub mod jump;
 pub mod line_jump;
 pub mod mru;
@@ -119,5 +120,12 @@ pub fn hash_map() -> HashMap<&'static str, Command> {
         select_block::copy_and_delete,
     );
     map.insert("select_block::change", select_block::change);
+    map.insert("git_status::show", git_status::show);
+    map.insert("git_status::stage_file", git_status::stage_file);
+    map.insert(
+        "git_status::open_under_cursor",
+        git_status::open_under_cursor,
+    );
+    map.insert("git_status::show_stash", git_status::show_stash);
     map
 }
