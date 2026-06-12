@@ -5,8 +5,6 @@ use scribe::buffer::Position;
 
 pub fn page_down(app: &mut Application) -> Result {
     let page_size = app.view.height().saturating_sub(2);
-
-    // Move cursor down by one page
     {
         let buffer = app
             .workspace
@@ -20,24 +18,21 @@ pub fn page_down(app: &mut Application) -> Result {
             offset: buffer.cursor.offset,
         });
     }
-
-    // Sync viewport to cursor
     {
         let buffer = app
             .workspace
             .current_buffer
             .as_ref()
             .context("No active buffer")?;
+        // Explicitly scroll the view down by a full page
+        app.view.scroll_down(buffer, page_size)?;
         app.view.scroll_to_cursor(buffer)?;
     }
-
     Ok(())
 }
 
 pub fn page_up(app: &mut Application) -> Result {
     let page_size = app.view.height().saturating_sub(2);
-
-    // Move cursor up by one page
     {
         let buffer = app
             .workspace
@@ -50,17 +45,16 @@ pub fn page_up(app: &mut Application) -> Result {
             offset: buffer.cursor.offset,
         });
     }
-
-    // Sync viewport to cursor
     {
         let buffer = app
             .workspace
             .current_buffer
             .as_ref()
             .context("No active buffer")?;
+        // Explicitly scroll the view up by a full page
+        app.view.scroll_up(buffer, page_size)?;
         app.view.scroll_to_cursor(buffer)?;
     }
-
     Ok(())
 }
 
