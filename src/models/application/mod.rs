@@ -444,8 +444,9 @@ impl Application {
                 &self.repository,
                 &self.error,
             ),
-            Mode::PendingDelete(_) => presenters::modes::pending_delete::display(
+            Mode::PendingDelete(ref mode) => presenters::modes::pending_delete::display(
                 &mut self.workspace,
+                mode,
                 &mut self.view,
                 &self.repository,
                 &self.error,

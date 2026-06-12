@@ -165,11 +165,16 @@ impl fmt::Display for PendingChangeMode {
 }
 
 #[derive(Default)]
-pub struct PendingDeleteMode;
+pub struct PendingDeleteMode {
+    pub keys: Vec<Key>,
+}
 
 impl PendingDeleteMode {
     pub fn new() -> PendingDeleteMode {
-        PendingDeleteMode::default()
+        PendingDeleteMode { keys: Vec::new() }
+    }
+    pub fn reset(&mut self) {
+        self.keys.clear();
     }
 }
 

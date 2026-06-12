@@ -118,6 +118,8 @@ pending_g:
     - application::handle_input
 
 pending_delete:
+  a:
+    f: daf::delete_around_function
   $:
     - buffer::delete_rest_of_line
     - application::switch_to_normal_mode
@@ -214,6 +216,8 @@ pending_right_bracket:
 leader:
   g:
     r: git::revert_hunk
+  d:
+    f: daf::delete_around_function
   _:
     - application::switch_to_normal_mode
     - application::handle_input

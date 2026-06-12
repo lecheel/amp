@@ -678,6 +678,14 @@ impl<'p> Presenter<'p> {
             .which_key_leader_entries(keys)
     }
 
+    pub fn which_key_pending_delete_entries(&self, keys: &[Key]) -> Vec<(String, String)> {
+        self.view
+            .preferences
+            .borrow()
+            .keymap()
+            .which_key_pending_delete_entries(keys)
+    }
+
     pub fn print_which_key_popup(&mut self, title: &str, entries: &[(String, String)]) {
         const MIN_WIDTH: usize = 30;
         const MAX_ROWS: usize = 10;

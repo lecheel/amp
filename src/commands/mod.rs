@@ -8,6 +8,7 @@ pub mod buffer_list;
 pub mod completion;
 pub mod confirm;
 pub mod cursor;
+pub mod daf;
 pub mod ex;
 pub mod fd;
 pub mod file_picker;
@@ -62,6 +63,7 @@ pub fn hash_map() -> HashMap<&'static str, Command> {
     map.insert("ex::navigate_right", ex::navigate_right);
     map.insert("git::revert_hunk", git::revert_hunk);
     map.insert("git::show_hunk_diff", git::show_hunk_diff);
+    map.insert("daf::delete_around_function", daf::delete_around_function);
     map.insert("cursor::match_bracket", cursor::match_bracket);
     map.insert(
         "file_picker::switch_to_file_picker_mode",
