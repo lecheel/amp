@@ -144,6 +144,9 @@ pub fn show(app: &mut Application) -> Result {
         content.push('\n');
     }
 
+    content.push('\n');
+    content.push_str("s: stage/unstage   z: stash   q: close   r: refresh   enter: open file\n");
+
     // Find or create the git status buffer
     let existing_id = find_git_status_buffer_id(app);
     if let Some(id) = existing_id {
