@@ -68,4 +68,13 @@ impl BufferRegistry {
             matches!(m.buffer_type, BufferType::Normal | BufferType::SedDiff)
         })
     }
+
+    pub fn is_disposable(&self, id: Option<usize>) -> bool {
+        self.get(id).map_or(false, |m| {
+            matches!(
+                m.buffer_type,
+                BufferType::Virtual | BufferType::SedDiff | BufferType::GitStatus
+            )
+        })
+    }
 }

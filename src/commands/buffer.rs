@@ -225,15 +225,17 @@ pub fn close(app: &mut Application) -> Result {
         .as_ref()
         .context(BUFFER_MISSING)?
         .id;
-
-    let (unmodified, empty) = if let Some(buf) = app.workspace.current_buffer.as_ref() {
-        (!app.view.effective_modified(buf), buf.data().is_empty())
+    let (unmodified, empty, disposable) = if let Some(buf) = app.workspace.current_buffer.as_ref() {
+        (
+            !app.view.effective_modified(buf),
+            buf.data().is_empty(),
+            app.view.buffer_registry.is_disposable(buf.id),
+        )
     } else {
         bail!(BUFFER_MISSING);
     };
     let confirm_mode = matches!(app.mode, Mode::Confirm(_));
-
-    if unmodified || empty || confirm_mode {
+    if unmodified || empty || confirm_mode || disposable {
         app.view.forget_buffer(
             app.workspace
                 .current_buffer
@@ -242,8 +244,6 @@ pub fn close(app: &mut Application) -> Result {
         )?;
         app.workspace.close_current_buffer();
         app.view.buffer_registry.unregister(id);
-
-        // After closing, check if only virtual/special buffers remain
         close_orphaned_special_buffers(app)?;
     } else {
         app.switch_to(ModeKey::Confirm);
@@ -251,7 +251,6 @@ pub fn close(app: &mut Application) -> Result {
             mode.command = close
         }
     }
-
     Ok(())
 }
 
