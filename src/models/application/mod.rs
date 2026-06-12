@@ -71,6 +71,7 @@ pub struct Application {
     pub ctagd_available: bool,
     pub sed_changes: Vec<SedChange>,
     pub sed_originals: std::collections::HashMap<PathBuf, String>,
+    pub last_known_branch: Option<String>,
 }
 
 impl Application {
@@ -111,7 +112,15 @@ impl Application {
             ctagd_available: ctagd::is_available(),
             sed_changes: Vec::new(),
             sed_originals: std::collections::HashMap::new(),
+            last_known_branch: None,
         };
+
+        let last_known_branch = app
+            .repository
+            .as_ref()
+            .and_then(|repo| repo.head().ok())
+            .and_then(|h| h.shorthand().map(|s| s.to_string()));
+        app.last_known_branch = last_known_branch;
 
         app.create_modes()?;
         app.apply_saved_positions();
@@ -217,6 +226,23 @@ impl Application {
     }
 
     fn render(&mut self) -> Result<()> {
+        // Detect branch change and auto-reload buffer to keep gutter accurate
+        if let Some(ref repo) = self.repository {
+            let current_branch = repo
+                .head()
+                .ok()
+                .and_then(|h| h.shorthand().map(|s| s.to_string()));
+            if current_branch != self.last_known_branch {
+                if current_branch.is_some() {
+                    if let Some(buf) = self.workspace.current_buffer.as_mut() {
+                        if let Some(ref _path) = buf.path {
+                            let _ = commands::buffer::reload(self);
+                        }
+                    }
+                }
+                self.last_known_branch = current_branch;
+            }
+        }
         self.view.gutter_statuses = self.compute_gutter_statuses();
 
         // Take the popup so it's only displayed once

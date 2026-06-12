@@ -1186,8 +1186,10 @@ pub fn fmt_save(app: &mut Application) -> Result {
         }
     }
     notify_ctagd_saved(app);
-
-    Ok(())
+    // Reload buffer from disk so content matches the formatted file
+    // This ensures git gutter shows accurate diff after formatting
+    reload(app)
+    // Ok(())
 }
 
 pub fn format(app: &mut Application) -> Result {
