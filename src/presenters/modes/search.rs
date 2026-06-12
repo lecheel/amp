@@ -1,6 +1,8 @@
 use crate::errors::*;
 use crate::models::application::modes::SearchMode;
-use crate::view::{Colors, CursorType, StatusLineData, Style, View};
+use crate::presenters::standard_status_line;
+use crate::view::{Alignment, Colors, CursorType, StatusLineData, Style, View};
+use git2::Repository;
 use scribe::buffer::Position;
 use scribe::Workspace;
 use unicode_segmentation::UnicodeSegmentation;
@@ -9,22 +11,12 @@ pub fn display(
     workspace: &mut Workspace,
     mode: &SearchMode,
     view: &mut View,
+    repo: &Option<Repository>,
     error: &Option<Error>,
 ) -> Result<()> {
-    let mut presenter = view.build_presenter()?;
-
-    // Draw the visible set of tokens to the terminal.
-    let buffer = workspace.current_buffer.as_ref().context(BUFFER_MISSING)?;
-    let data = buffer.data();
-    presenter.print_buffer(
-        buffer,
-        &data,
-        &workspace.syntax_set,
-        mode.results.as_ref().map(|r| r.as_slice()),
-        None,
-    )?;
-
-    let mode_display = format!(" {mode} ");
+    let mut status_entries =
+        standard_status_line("SEARCH", Colors::SearchMode, workspace, view, repo);
+    // Replace expand entry with search input, add results count
     let search_input = format!(" {}", mode.input.as_ref().unwrap_or(&String::new()));
     let result_display = if mode.insert {
         String::new()
@@ -41,32 +33,41 @@ pub fn display(
     } else {
         String::new()
     };
+    // Replace filename with search input
+    status_entries[2] = StatusLineData {
+        content: search_input,
+        style: Style::Default,
+        colors: Colors::Focused,
+        alignment: Alignment::Expand,
+    };
+    // Add result count at the end
+    status_entries.push(StatusLineData {
+        content: result_display,
+        style: Style::Default,
+        colors: Colors::Focused,
+        alignment: Alignment::Right,
+    });
 
-    let cursor_offset = mode_display.graphemes(true).count() + search_input.graphemes(true).count();
+    let cursor_offset = " SEARCH ".graphemes(true).count()
+        + format!(" {}", mode.input.as_ref().unwrap_or(&String::new()))
+            .graphemes(true)
+            .count();
 
+    let mut presenter = view.build_presenter()?;
+    let buffer = workspace.current_buffer.as_ref().context(BUFFER_MISSING)?;
+    let data = buffer.data();
+    presenter.print_buffer(
+        buffer,
+        &data,
+        &workspace.syntax_set,
+        mode.results.as_ref().map(|r| r.as_slice()),
+        None,
+    )?;
     if let Some(e) = error {
         presenter.print_error(&e.to_string());
     } else {
-        presenter.print_status_line(&[
-            StatusLineData {
-                content: mode_display,
-                style: Style::Default,
-                colors: Colors::SearchMode,
-            },
-            StatusLineData {
-                content: search_input,
-                style: Style::Default,
-                colors: Colors::Focused,
-            },
-            StatusLineData {
-                content: result_display,
-                style: Style::Default,
-                colors: Colors::Focused,
-            },
-        ]);
+        presenter.print_status_line(&status_entries);
     }
-
-    // Move the cursor to the end of the search query input.
     if mode.insert {
         let cursor_line = presenter.height() - 1;
         presenter.set_cursor(Some(Position {
@@ -74,12 +75,7 @@ pub fn display(
             offset: cursor_offset,
         }));
     }
-
-    // Show a blinking, vertical bar indicating input.
     presenter.set_cursor_type(CursorType::BlinkingBar);
-
-    // Render the changes to the screen.
     presenter.present()?;
-
     Ok(())
 }

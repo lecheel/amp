@@ -3,6 +3,7 @@ use crate::input::Key;
 use crate::models::application::CompletionState;
 use crate::view::buffer::{BufferRenderer, LexemeMapper};
 use crate::view::color::{ColorMap, Colors};
+use crate::view::data::Alignment;
 use crate::view::style::Style;
 use crate::view::terminal::{Cell, CursorType, TerminalBuffer};
 use crate::view::StatusLineData;
@@ -145,61 +146,93 @@ impl<'p> Presenter<'p> {
 
     pub fn print_status_line(&mut self, entries: &[StatusLineData]) {
         let line = self.view.terminal.height() - 1;
+        let width = self.view.terminal.width();
 
-        debug!("rendering status line");
-
-        entries
+        let left: Vec<&StatusLineData> = entries
             .iter()
-            .enumerate()
-            .fold(0, |offset, (index, element)| {
-                let content = match entries.len() {
-                    // There's only one element; have it fill the line.
-                    1 => format!(
-                        "{:width$}",
-                        element.content,
-                        width = self.view.terminal.width(),
-                    ),
+            .filter(|e| e.alignment == Alignment::Left)
+            .collect();
+        let expand: Vec<&StatusLineData> = entries
+            .iter()
+            .filter(|e| e.alignment == Alignment::Expand)
+            .collect();
+        let right: Vec<&StatusLineData> = entries
+            .iter()
+            .filter(|e| e.alignment == Alignment::Right)
+            .collect();
 
-                    // Expand the last element to fill the remaining width.
-                    2 if index == entries.len() - 1 => format!(
-                        "{:width$}",
-                        element.content,
-                        width = self.view.terminal.width().saturating_sub(offset),
-                    ),
-                    2 => element.content.clone(),
+        let left_width: usize = left.iter().map(|e| e.content.graphemes(true).count()).sum();
+        let right_width: usize = right
+            .iter()
+            .map(|e| e.content.graphemes(true).count())
+            .sum();
+        let remaining = width.saturating_sub(left_width).saturating_sub(right_width);
 
-                    _ if index == entries.len() - 2 => {
-                        let space = offset + entries[index + 1].content.len();
-                        format!(
-                            "{:width$}",
-                            element.content,
-                            width = self.view.terminal.width().saturating_sub(space),
-                        )
-                    }
-                    _ => element.content.clone(),
-                };
+        // Render left entries packed from the left edge
+        let mut offset = 0;
+        for entry in &left {
+            self.print(
+                &Position { line, offset },
+                entry.style,
+                entry.colors,
+                entry.content.clone(),
+            );
+            offset += entry.content.graphemes(true).count();
+        }
 
-                // Update the tracked offset.
-                let updated_offset = offset + content.len();
-
+        // Render expand entries filling the middle
+        if expand.is_empty() {
+            if !right.is_empty() {
+                let gap = width.saturating_sub(right_width).saturating_sub(offset);
+                if gap > 0 {
+                    self.print(
+                        &Position { line, offset },
+                        Style::Default,
+                        Colors::Focused,
+                        " ".repeat(gap),
+                    );
+                }
+            }
+        } else {
+            let expand_width = remaining / expand.len().max(1);
+            let extra = remaining % expand.len().max(1);
+            for (i, entry) in expand.iter().enumerate() {
+                let w = expand_width + if i < extra { 1 } else { 0 };
+                let content = format!("{:width$}", entry.content, width = w);
                 self.print(
                     &Position { line, offset },
-                    element.style,
-                    element.colors,
+                    entry.style,
+                    entry.colors,
                     content,
                 );
+                offset += w;
+            }
+        }
 
-                updated_offset
-            });
+        // Render right entries packed from the right edge
+        let mut right_offset = width;
+        for entry in right.iter().rev() {
+            let len = entry.content.graphemes(true).count();
+            right_offset = right_offset.saturating_sub(len);
+            self.print(
+                &Position {
+                    line,
+                    offset: right_offset,
+                },
+                entry.style,
+                entry.colors,
+                entry.content.clone(),
+            );
+        }
     }
 
     pub fn print_error<I: Into<String>>(&mut self, error: I) {
         debug!("rendering error");
-
         self.print_status_line(&[StatusLineData {
             content: error.into(),
             style: Style::Bold,
             colors: Colors::Warning,
+            alignment: Alignment::Expand,
         }]);
     }
 
@@ -947,5 +980,32 @@ mod tests {
             .get_render_cache(workspace.current_buffer.as_ref().unwrap())
             .unwrap();
         assert_ne!(cache.borrow().iter().count(), 0);
+    }
+}
+
+impl StatusLineData {
+    pub fn left(content: String, style: Style, colors: Colors) -> Self {
+        Self {
+            content,
+            style,
+            colors,
+            alignment: Alignment::Left,
+        }
+    }
+    pub fn expand(content: String, style: Style, colors: Colors) -> Self {
+        Self {
+            content,
+            style,
+            colors,
+            alignment: Alignment::Expand,
+        }
+    }
+    pub fn right(content: String, style: Style, colors: Colors) -> Self {
+        Self {
+            content,
+            style,
+            colors,
+            alignment: Alignment::Right,
+        }
     }
 }

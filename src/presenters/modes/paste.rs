@@ -1,35 +1,26 @@
 use crate::errors::*;
-use crate::presenters::current_buffer_status_line_data;
-use crate::view::{Colors, CursorType, StatusLineData, Style, View};
+use crate::presenters::standard_status_line;
+use crate::view::{Colors, CursorType, View};
+use git2::Repository;
 use scribe::Workspace;
 
-pub fn display(workspace: &mut Workspace, view: &mut View, error: &Option<Error>) -> Result<()> {
+pub fn display(
+    workspace: &mut Workspace,
+    view: &mut View,
+    repo: &Option<Repository>,
+    error: &Option<Error>,
+) -> Result<()> {
+    let status_entries = standard_status_line("PASTE", Colors::PasteMode, workspace, view, repo);
     let mut presenter = view.build_presenter()?;
-    let buffer_status = current_buffer_status_line_data(workspace);
     let buf = workspace.current_buffer.as_ref().context(BUFFER_MISSING)?;
     let data = buf.data();
-
-    // Draw the visible set of tokens to the terminal.
     presenter.print_buffer(buf, &data, &workspace.syntax_set, None, None)?;
-
     if let Some(e) = error {
         presenter.print_error(&e.to_string());
     } else {
-        presenter.print_status_line(&[
-            StatusLineData {
-                content: " PASTE ".to_string(),
-                style: Style::Default,
-                colors: Colors::PasteMode,
-            },
-            buffer_status,
-        ]);
+        presenter.print_status_line(&status_entries);
     }
-
-    // Show a blinking, vertical bar indicating input.
     presenter.set_cursor_type(CursorType::BlinkingBar);
-
-    // Render the changes to the screen.
     presenter.present()?;
-
     Ok(())
 }

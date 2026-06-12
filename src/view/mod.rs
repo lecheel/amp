@@ -10,6 +10,7 @@ mod theme_loader;
 // Published API
 pub use self::buffer::{LexemeMapper, MappedLexeme};
 pub use self::color::{Colors, RGBColor};
+pub use self::data::Alignment;
 pub use self::data::StatusLineData;
 pub use self::presenter::Presenter;
 pub use self::style::Style;

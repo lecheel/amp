@@ -1,43 +1,29 @@
 use crate::errors::*;
 use crate::models::application::modes::JumpMode;
-use crate::presenters::current_buffer_status_line_data;
-use crate::view::{Colors, StatusLineData, Style, View};
+use crate::presenters::standard_status_line;
+use crate::view::{Colors, View};
+use git2::Repository;
 use scribe::Workspace;
 
 pub fn display(
     workspace: &mut Workspace,
     mode: &mut JumpMode,
     view: &mut View,
+    repo: &Option<Repository>,
     error: &Option<Error>,
 ) -> Result<()> {
+    let status_entries = standard_status_line("JUMP", Colors::Inverted, workspace, view, repo);
     let mut presenter = view.build_presenter()?;
-    let buffer_status = current_buffer_status_line_data(workspace);
     let buf = workspace.current_buffer.as_ref().context(BUFFER_MISSING)?;
     let data = buf.data();
-
     mode.reset_display();
-
-    // Draw the visible set of tokens to the terminal.
     presenter.print_buffer(buf, &data, &workspace.syntax_set, None, Some(mode))?;
-
     if let Some(e) = error {
         presenter.print_error(&e.to_string());
     } else {
-        presenter.print_status_line(&[
-            StatusLineData {
-                content: " JUMP ".to_string(),
-                style: Style::Default,
-                colors: Colors::Inverted,
-            },
-            buffer_status,
-        ]);
+        presenter.print_status_line(&status_entries);
     }
-
-    // Don't display a cursor.
     presenter.set_cursor(None);
-
-    // Render the changes to the screen.
     presenter.present()?;
-
     Ok(())
 }

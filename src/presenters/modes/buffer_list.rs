@@ -1,8 +1,9 @@
 use crate::errors::*;
 use crate::models::application::modes::buffer_list::BufferListMode;
 use crate::models::application::modes::SearchSelectMode;
-use crate::presenters::current_buffer_status_line_data;
-use crate::view::{Colors, CursorType, RGBColor, StatusLineData, Style, View};
+use crate::presenters::standard_status_line;
+use crate::view::{Colors, CursorType, RGBColor, Style, View};
+use git2::Repository;
 use scribe::buffer::Position;
 use scribe::Workspace;
 use unicode_segmentation::UnicodeSegmentation;
@@ -11,13 +12,14 @@ pub fn display(
     workspace: &mut Workspace,
     mode: &mut BufferListMode,
     view: &mut View,
+    repo: &Option<Repository>,
     error: &Option<Error>,
 ) -> Result<()> {
     let data;
+    let status_entries = standard_status_line("BUFFERS", Colors::Inverted, workspace, view, repo);
     let mut presenter = view.build_presenter()?;
     presenter.overlay = true;
 
-    let buffer_status = current_buffer_status_line_data(workspace);
     if let Some(buf) = workspace.current_buffer.as_ref() {
         data = buf.data();
         presenter.print_buffer(buf, &data, &workspace.syntax_set, None, None)?;
@@ -26,23 +28,16 @@ pub fn display(
     if let Some(e) = error {
         presenter.print_error(&e.to_string());
     } else {
-        presenter.print_status_line(&[
-            StatusLineData {
-                content: String::from(" BUFFERS "),
-                style: Style::Default,
-                colors: Colors::Inverted,
-            },
-            buffer_status,
-        ]);
+        presenter.print_status_line(&status_entries);
     }
 
+    // ... rest of the file UNCHANGED (popup box, results, cursor) ...
     let box_w = std::cmp::max((presenter.width() as f32 * 0.6).ceil() as usize, 40);
     const FIXED_BODY_LINES: usize = 12;
     let box_h = FIXED_BODY_LINES + 3;
     let row0 = (presenter.height().saturating_sub(1).saturating_sub(box_h)) / 2;
     let col0 = (presenter.width().saturating_sub(box_w)) / 2;
     let inner_w = box_w.saturating_sub(4);
-
     let border_fg = RGBColor(0x58, 0x5C, 0x6E);
     let dark_bg = RGBColor(0x1E, 0x1E, 0x2E);
     let light_fg = RGBColor(0xC0, 0xCA, 0xF5);
@@ -51,11 +46,9 @@ pub fn display(
     let title_fg = RGBColor(0x89, 0xB4, 0xFA);
     let sel_fg = RGBColor(0xFF, 0xFF, 0xFF);
     let sel_bg = RGBColor(0x4C, 0x78, 0xCC);
-
     let border_colors = Colors::Custom(border_fg, dark_bg);
     let text_colors = Colors::Custom(light_fg, dark_bg);
     let title_colors = Colors::Custom(title_fg, dark_bg);
-
     let print_line = |presenter: &mut crate::view::Presenter,
                       row: usize,
                       text: &str,
@@ -92,8 +85,6 @@ pub fn display(
             "│",
         );
     };
-
-    // Top border with title
     presenter.print(
         &Position {
             line: row0,
@@ -138,8 +129,6 @@ pub fn display(
         border_colors,
         "╮",
     );
-
-    // Input row
     let input_row = row0 + 1;
     let input_str = format!("> {}", mode.query());
     let input_colors = if mode.insert_mode() {
@@ -154,8 +143,6 @@ pub fn display(
         Style::Bold,
         input_colors,
     );
-
-    // Results with scroll offset management
     let selected = mode.selected_index();
     let new_scroll_offset = if selected < mode.scroll_offset {
         selected
@@ -166,7 +153,6 @@ pub fn display(
     };
     mode.scroll_offset = new_scroll_offset;
     let scroll_offset = new_scroll_offset;
-
     let results: Vec<_> = mode.results().collect();
     for i in 0..FIXED_BODY_LINES {
         let row = row0 + 2 + i;
@@ -189,8 +175,6 @@ pub fn display(
             print_line(&mut presenter, row, "", Style::Default, text_colors);
         }
     }
-
-    // Bottom border
     let bottom_row = row0 + 2 + FIXED_BODY_LINES;
     presenter.print(
         &Position {
@@ -221,8 +205,6 @@ pub fn display(
         border_colors,
         "╯",
     );
-
-    // Cursor
     if mode.insert_mode() {
         let cursor_offset = col0 + 4 + mode.query().graphemes(true).count();
         presenter.set_cursor(Some(Position {
@@ -233,7 +215,6 @@ pub fn display(
     } else {
         presenter.set_cursor(None);
     }
-
     presenter.present()?;
     Ok(())
 }

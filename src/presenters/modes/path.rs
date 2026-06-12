@@ -1,6 +1,6 @@
 use crate::errors::*;
 use crate::models::application::modes::PathMode;
-use crate::view::{Colors, CursorType, StatusLineData, Style, View};
+use crate::view::{Alignment, Colors, CursorType, StatusLineData, Style, View};
 use scribe::buffer::Position;
 use scribe::Workspace;
 use unicode_segmentation::UnicodeSegmentation;
@@ -12,17 +12,12 @@ pub fn display(
     error: &Option<Error>,
 ) -> Result<()> {
     let mut presenter = view.build_presenter()?;
-
-    // Draw the visible set of tokens to the terminal.
     let buffer = workspace.current_buffer.as_ref().context(BUFFER_MISSING)?;
     let data = buffer.data();
     presenter.print_buffer(buffer, &data, &workspace.syntax_set, None, None)?;
-
     let mode_display = format!(" {mode} ");
     let search_input = format!(" {}", mode.input);
-
     let cursor_offset = mode_display.graphemes(true).count() + search_input.graphemes(true).count();
-
     if let Some(e) = error {
         presenter.print_error(&e.to_string());
     } else {
@@ -31,16 +26,16 @@ pub fn display(
                 content: mode_display,
                 style: Style::Default,
                 colors: Colors::PathMode,
+                alignment: Alignment::Left,
             },
             StatusLineData {
                 content: search_input,
                 style: Style::Default,
                 colors: Colors::Focused,
+                alignment: Alignment::Expand,
             },
         ]);
     }
-
-    // Move the cursor to the end of the search query input.
     {
         let cursor_line = presenter.height() - 1;
         presenter.set_cursor(Some(Position {
@@ -48,12 +43,7 @@ pub fn display(
             offset: cursor_offset,
         }));
     }
-
-    // Show a blinking, vertical bar indicating input.
     presenter.set_cursor_type(CursorType::BlinkingBar);
-
-    // Render the changes to the screen.
     presenter.present()?;
-
     Ok(())
 }

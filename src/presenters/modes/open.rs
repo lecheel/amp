@@ -1,7 +1,8 @@
 use crate::errors::*;
 use crate::models::application::modes::{OpenMode, SearchSelectMode};
-use crate::presenters::current_buffer_status_line_data;
-use crate::view::{Colors, CursorType, StatusLineData, Style, View};
+use crate::presenters::standard_status_line;
+use crate::view::{Colors, CursorType, Style, View};
+use git2::Repository;
 use scribe::buffer::Position;
 use scribe::Workspace;
 use std::cmp;
@@ -11,32 +12,24 @@ pub fn display(
     workspace: &mut Workspace,
     mode: &mut OpenMode,
     view: &mut View,
+    repo: &Option<Repository>,
     error: &Option<Error>,
 ) -> Result<()> {
     let data;
     let padded_message;
+    let status_entries = standard_status_line("OPEN", Colors::Inverted, workspace, view, repo);
     let mut presenter = view.build_presenter()?;
     let mode_config = mode.config().clone();
     let mut padded_content = Vec::new();
     let mut remaining_lines = Vec::new();
 
-    let buffer_status = current_buffer_status_line_data(workspace);
-
     if let Some(buf) = workspace.current_buffer.as_ref() {
         data = buf.data();
         presenter.print_buffer(buf, &data, &workspace.syntax_set, None, None)?;
-
         if let Some(e) = error {
             presenter.print_error(&e.to_string());
         } else {
-            presenter.print_status_line(&[
-                StatusLineData {
-                    content: format!(" {mode} "),
-                    style: Style::Default,
-                    colors: Colors::Inverted,
-                },
-                buffer_status,
-            ]);
+            presenter.print_status_line(&status_entries);
         }
     }
 

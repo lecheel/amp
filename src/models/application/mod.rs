@@ -289,6 +289,7 @@ impl Application {
                 &mut self.workspace,
                 mode,
                 &mut self.view,
+                &self.repository,
                 &self.error,
             ),
             Mode::Ex(ref mode) => presenters::modes::ex::display(
@@ -301,63 +302,76 @@ impl Application {
                 &mut self.workspace,
                 mode,
                 &mut self.view,
+                &self.repository,
                 &self.error,
             ),
             Mode::TagJump(ref mut mode) => presenters::modes::search_select::display(
                 &mut self.workspace,
                 mode,
                 &mut self.view,
+                &self.repository,
                 &self.error,
             ),
             Mode::BufferList(ref mut mode) => presenters::modes::buffer_list::display(
                 &mut self.workspace,
                 mode,
                 &mut self.view,
+                &self.repository,
                 &self.error,
             ),
             Mode::SelectBlock(ref mode) => presenters::modes::select_block::display_select_block(
                 &mut self.workspace,
                 mode,
                 &mut self.view,
+                &self.repository,
                 &self.error,
             ),
             Mode::BlockInsert(ref mode) => presenters::modes::select_block::display_block_insert(
                 &mut self.workspace,
                 mode,
                 &mut self.view,
+                &self.repository,
                 &self.error,
             ),
             Mode::MRU(ref mut mode) => presenters::modes::search_select::display(
                 &mut self.workspace,
                 mode,
                 &mut self.view,
+                &self.repository,
                 &self.error,
             ),
             Mode::Fd(ref mut mode) => presenters::modes::fd::display(
                 &mut self.workspace,
                 mode,
                 &mut self.view,
+                &self.repository,
                 &self.error,
             ),
-            Mode::Insert => {
-                presenters::modes::insert::display(&mut self.workspace, &mut self.view, &self.error)
-            }
+            Mode::Insert => presenters::modes::insert::display(
+                &mut self.workspace,
+                &mut self.view,
+                &self.repository,
+                &self.error,
+            ),
             Mode::Open(ref mut mode) => presenters::modes::open::display(
                 &mut self.workspace,
                 mode,
                 &mut self.view,
+                &self.repository,
                 &self.error,
             ),
             Mode::Search(ref mode) => presenters::modes::search::display(
                 &mut self.workspace,
                 mode,
                 &mut self.view,
+                &self.repository,
                 &self.error,
             ),
             Mode::Jump(ref mut mode) => presenters::modes::jump::display(
                 &mut self.workspace,
                 mode,
                 &mut self.view,
+                &self.repository,
                 &self.error,
             ),
             Mode::LineJump(ref mode) => presenters::modes::line_jump::display(
@@ -366,9 +380,12 @@ impl Application {
                 &mut self.view,
                 &self.error,
             ),
-            Mode::Paste => {
-                presenters::modes::paste::display(&mut self.workspace, &mut self.view, &self.error)
-            }
+            Mode::Paste => presenters::modes::paste::display(
+                &mut self.workspace,
+                &mut self.view,
+                &self.repository,
+                &self.error,
+            ),
             Mode::Path(ref mode) => presenters::modes::path::display(
                 &mut self.workspace,
                 mode,
@@ -378,21 +395,25 @@ impl Application {
             Mode::PendingG(_) => presenters::modes::pending_g::display(
                 &mut self.workspace,
                 &mut self.view,
+                &self.repository,
                 &self.error,
             ),
             Mode::PendingChange(_) => presenters::modes::pending_change::display(
                 &mut self.workspace,
                 &mut self.view,
+                &self.repository,
                 &self.error,
             ),
             Mode::PendingDelete(_) => presenters::modes::pending_delete::display(
                 &mut self.workspace,
                 &mut self.view,
+                &self.repository,
                 &self.error,
             ),
             Mode::PendingYank(_) => presenters::modes::pending_yank::display(
                 &mut self.workspace,
                 &mut self.view,
+                &self.repository,
                 &self.error,
             ),
             Mode::PendingLeftBracket(_) => presenters::modes::pending_left_bracket::display(
@@ -411,30 +432,35 @@ impl Application {
                 &mut self.workspace,
                 mode,
                 &mut self.view,
+                &self.repository,
                 &self.error,
             ),
             Mode::SymbolJump(ref mut mode) => presenters::modes::search_select::display(
                 &mut self.workspace,
                 mode,
                 &mut self.view,
+                &self.repository,
                 &self.error,
             ),
             Mode::Syntax(ref mut mode) => presenters::modes::search_select::display(
                 &mut self.workspace,
                 mode,
                 &mut self.view,
+                &self.repository,
                 &self.error,
             ),
             Mode::Select(ref mode) => presenters::modes::select::display(
                 &mut self.workspace,
                 mode,
                 &mut self.view,
+                &self.repository,
                 &self.error,
             ),
             Mode::SelectLine(ref mode) => presenters::modes::select_line::display(
                 &mut self.workspace,
                 mode,
                 &mut self.view,
+                &self.repository,
                 &self.error,
             ),
             Mode::Normal => presenters::modes::normal::display(
@@ -447,6 +473,7 @@ impl Application {
                 &mut self.workspace,
                 mode,
                 &mut self.view,
+                &self.repository,
                 &self.error,
             ),
             Mode::Exit => Ok(()),
