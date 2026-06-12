@@ -163,21 +163,17 @@ impl KeyMap {
     ///   }
     ///
     pub fn merge(&mut self, mut key_map: KeyMap) {
-        // Drain moves the owned String keys, avoiding the &String mismatch
+        // Deep-merge flat mode keymaps (per mode, per key)
         for (mode, mut other_key_bindings) in key_map.0.drain() {
             let key_bindings = self.0.entry(mode).or_insert_with(HashMap::new);
             for (key, command) in other_key_bindings.drain() {
                 key_bindings.insert(key, command);
             }
         }
-
-        // Drain the leader tree as well
-        for (key, node) in key_map.1.drain() {
-            self.1.insert(key, node);
-        }
-        for (key, node) in key_map.2.drain() {
-            self.2.insert(key, node);
-        }
+        // Deep-merge leader tree
+        merge_leader_tree(&mut self.1, key_map.1);
+        // Deep-merge pending_delete tree
+        merge_leader_tree(&mut self.2, key_map.2);
     }
 }
 
@@ -185,6 +181,34 @@ pub enum LeaderLookup {
     Found(SmallVec<[Command; 4]>),
     Prefix,  // valid so far, wait for more keys
     NoMatch, // cancel
+}
+
+fn merge_leader_tree(base: &mut HashMap<Key, LeaderNode>, overlay: HashMap<Key, LeaderNode>) {
+    for (key, node) in overlay {
+        match node {
+            LeaderNode::Command(cmds) => {
+                // Leaf command always wins — insert/replace
+                base.insert(key, LeaderNode::Command(cmds));
+            }
+            LeaderNode::Subtree(overlay_sub) => {
+                match base.entry(key) {
+                    std::collections::hash_map::Entry::Occupied(mut entry) => {
+                        if let LeaderNode::Subtree(ref mut base_sub) = entry.get_mut() {
+                            // Both are subtrees — recurse to deep-merge
+                            merge_leader_tree(base_sub, overlay_sub);
+                        } else {
+                            // Base was a leaf, overlay is a subtree — replace
+                            entry.insert(LeaderNode::Subtree(overlay_sub));
+                        }
+                    }
+                    std::collections::hash_map::Entry::Vacant(entry) => {
+                        // New key entirely — insert
+                        entry.insert(LeaderNode::Subtree(overlay_sub));
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn parse_leader_tree(

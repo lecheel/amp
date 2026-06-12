@@ -3,6 +3,7 @@ pub enum RepeatableAction {
     DeleteCurrentLine,
     DeleteToken,
     DeleteRestOfLine,
+    DeleteAroundFunction,
     ChangeCurrentLine,
     ChangeToken,
     ChangeRestOfLine,

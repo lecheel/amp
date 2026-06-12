@@ -19,6 +19,7 @@ pub fn repeat_last_change(app: &mut Application) -> Result {
         Some(RepeatableAction::DeleteCurrentLine) => commands::buffer::delete_current_line(app)?,
         Some(RepeatableAction::DeleteToken) => commands::buffer::delete_token(app)?,
         Some(RepeatableAction::DeleteRestOfLine) => commands::buffer::delete_rest_of_line(app)?,
+        Some(RepeatableAction::DeleteAroundFunction) => commands::daf::delete_around_function(app)?,
         Some(RepeatableAction::ChangeCurrentLine) => commands::buffer::change_current_line(app)?,
         Some(RepeatableAction::ChangeToken) => commands::buffer::change_token(app)?,
         Some(RepeatableAction::ChangeRestOfLine) => commands::buffer::change_rest_of_line(app)?,
