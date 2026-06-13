@@ -13,7 +13,6 @@ editor.
 ![Amp screenshot](mru.png?raw=true "Amp")
 ![Amp screenshot](rectops.png?raw=true "Amp")
 ![Amp screenshot](ripgrep.png?raw=true "Amp")
-![Amp screenshot](screenshot.png?raw=true "Amp")
 ![Amp screenshot](whichkey.png?raw=true "Amp")
 
 
