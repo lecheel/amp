@@ -66,29 +66,59 @@ pub fn handle_input(app: &mut Application) -> Result {
         .map(|buf| app.view.buffer_registry.is_git_status(buf.id))
         .unwrap_or(false);
     if is_git_status {
-        if let Some(ref key) = app.view.last_key {
-            match key {
-                Key::Char('s') => {
-                    crate::commands::git_status::stage_file(app)?;
-                    return Ok(());
+        // If we have a pending stash action confirmation, handle p/d/a first
+        if app.pending_stash_ref.is_some() {
+            if let Some(ref key) = app.view.last_key {
+                match key {
+                    Key::Char('p') => {
+                        crate::commands::git_status::pop_stash(app)?;
+                        return Ok(());
+                    }
+                    Key::Char('d') => {
+                        crate::commands::git_status::drop_stash(app)?;
+                        return Ok(());
+                    }
+                    Key::Char('a') => {
+                        crate::commands::git_status::apply_stash(app)?;
+                        return Ok(());
+                    }
+                    _ => {
+                        // Any other key dismisses the prompt
+                        app.pending_stash_ref = None;
+                        crate::commands::git_status::show(app)?;
+                        return Ok(());
+                    }
                 }
-                Key::Char('z') => {
-                    crate::commands::git_status::show_stash(app)?;
-                    return Ok(());
+            }
+        }
+
+        // Only intercept git status shortcuts in Normal mode,
+        // so Ex mode (and other modes) can handle their own keys
+        if matches!(app.mode, Mode::Normal) {
+            if let Some(ref key) = app.view.last_key {
+                match key {
+                    Key::Char('s') => {
+                        crate::commands::git_status::stage_file(app)?;
+                        return Ok(());
+                    }
+                    Key::Char('z') => {
+                        crate::commands::git_status::prompt_stash(app)?;
+                        return Ok(());
+                    }
+                    Key::Enter => {
+                        crate::commands::git_status::open_under_cursor(app)?;
+                        return Ok(());
+                    }
+                    Key::Char('q') => {
+                        crate::commands::buffer::close(app)?;
+                        return Ok(());
+                    }
+                    Key::Char('r') => {
+                        crate::commands::git_status::show(app)?;
+                        return Ok(());
+                    }
+                    _ => {}
                 }
-                Key::Enter => {
-                    crate::commands::git_status::open_under_cursor(app)?;
-                    return Ok(());
-                }
-                Key::Char('q') => {
-                    crate::commands::buffer::close(app)?;
-                    return Ok(());
-                }
-                Key::Char('r') => {
-                    crate::commands::git_status::show(app)?;
-                    return Ok(());
-                }
-                _ => {}
             }
         }
     }

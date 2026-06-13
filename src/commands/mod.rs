@@ -128,6 +128,6 @@ pub fn hash_map() -> HashMap<&'static str, Command> {
         "git_status::open_under_cursor",
         git_status::open_under_cursor,
     );
-    map.insert("git_status::show_stash", git_status::show_stash);
+    // map.insert("git_status::show_stash", git_status::show_stash);
     map
 }

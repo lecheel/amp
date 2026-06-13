@@ -72,6 +72,7 @@ pub struct Application {
     pub sed_changes: Vec<SedChange>,
     pub sed_originals: std::collections::HashMap<PathBuf, String>,
     pub last_known_branch: Option<String>,
+    pub pending_stash_ref: Option<String>,
 }
 
 impl Application {
@@ -113,6 +114,7 @@ impl Application {
             sed_changes: Vec::new(),
             sed_originals: std::collections::HashMap::new(),
             last_known_branch: None,
+            pending_stash_ref: None,
         };
 
         let last_known_branch = app

@@ -212,6 +212,7 @@ pub fn accept_input(app: &mut Application) -> Result {
         "cp" => commands::rg::prev_result(app)?,
         "fd" => commands::fd::switch_to_fd_mode(app, arg)?,
         "sed" => commands::sed::run(app, arg)?,
+        "stash" => commands::git_status::do_stash(app, arg)?,
         "gs" => commands::git_status::show(app)?,
         "gentags" => commands::tag::gentags(app)?,
         "tag" | "ta" => {
