@@ -4,7 +4,7 @@ Heavily inspired by Vi/Vim. Amp aims to take the core interaction model of Vim,
 simplify it, and bundle in the essential features required for a modern text
 editor.
 
-![Amp screenshot](./res/screenshot.png?raw=true "Amp")
+![Amp screenshot](./screenshot.png?raw=true "Amp")
 ![Amp screenshot](./res/bufferlist.png?raw=true "BufferList")
 ![Amp screenshot](./res/cmdmode.png?raw=true "CmdMode")
 ![Amp screenshot](./res/filepicker.png?raw=true "FilePicker")
