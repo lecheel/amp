@@ -85,10 +85,7 @@ impl Application {
 
         // Load saved buffer positions before creating the workspace
         let saved_buffer_positions = buffer_positions::load().unwrap_or_default();
-
-        // Set up a workspace in the current directory.
-        let workspace = create_workspace(&mut view, &preferences.borrow(), args)?;
-
+        let (workspace, line_overrides) = create_workspace(&mut view, &preferences.borrow(), args)?;
         let mut app = Application {
             current_mode: ModeKey::Normal,
             previous_mode: ModeKey::Normal,
@@ -126,7 +123,7 @@ impl Application {
 
         app.create_modes()?;
         app.apply_saved_positions();
-
+        app.apply_line_overrides(&line_overrides);
         if app.ctagd_available {
             if let Some(ref repo) = app.repository {
                 if let Some(repo_path) = repo.workdir() {
@@ -187,10 +184,38 @@ impl Application {
             self.workspace.next_buffer();
         }
     }
-
-    /// Collect and save cursor positions for all open buffers.
-    /// Merges with previously saved positions so files that were
-    /// closed earlier in the session aren't lost.
+    /// Apply line overrides from `+N` command-line arguments.
+    /// These take precedence over saved buffer positions.
+    fn apply_line_overrides(&mut self, overrides: &HashMap<String, usize>) {
+        if self.workspace.current_buffer.is_none() || overrides.is_empty() {
+            return;
+        }
+        let start_id = self.workspace.current_buffer.as_ref().map(|b| b.id);
+        let mut first = true;
+        loop {
+            if !first && self.workspace.current_buffer.as_ref().map(|b| b.id) == start_id {
+                break;
+            }
+            first = false;
+            if let Some(buf) = self.workspace.current_buffer.as_mut() {
+                if let Some(path) = buf.path.as_ref() {
+                    let path_str = path.to_string_lossy().to_string();
+                    if let Some(&line) = overrides.get(&path_str) {
+                        if line > 0 {
+                            let target_line = line - 1;
+                            let max_line = buf.line_count().saturating_sub(1);
+                            let clamped_line = target_line.min(max_line);
+                            buf.cursor.move_to(Position {
+                                line: clamped_line,
+                                offset: 0,
+                            });
+                        }
+                    }
+                }
+            }
+            self.workspace.next_buffer();
+        }
+    }
     pub fn save_buffer_positions(&mut self) -> Result<()> {
         let mut map = buffer_positions::load().unwrap_or_default();
 
@@ -861,13 +886,20 @@ fn initialize_preferences() -> Rc<RefCell<Preferences>> {
         Preferences::load().unwrap_or_else(|_| Preferences::new(None)),
     ))
 }
-
+/// Creates the workspace and parses `+N` line-number arguments from the command line.
+///
+/// The `+N` syntax (e.g., `amp file.txt +234` or `amp +234 file.txt`) opens the
+/// associated file with the cursor positioned at line N. When `+N` appears before
+/// a filename, it applies to that file. When it appears after all filenames, it
+/// applies to the first file opened.
+///
+/// Returns a tuple of `(Workspace, line_overrides)` where `line_overrides` maps
+/// file path strings to their requested line numbers.
 fn create_workspace(
     view: &mut View,
     preferences: &Preferences,
     args: &[String],
-) -> Result<Workspace> {
-    // Discard the executable portion of the argument list.
+) -> Result<(Workspace, HashMap<String, usize>)> {
     let mut path_args = args.iter().skip(1).peekable();
 
     // Move into an argument-specified directory, if present.
@@ -892,10 +924,22 @@ fn create_workspace(
         path_args.next();
     }
 
-    // Try to open specified files.
-    for path_arg in path_args {
-        let path = Path::new(&path_arg);
+    // Parse +N line number arguments alongside file paths.
+    // `+N` before a file applies to that file; `+N` after all files applies to the first file.
+    let mut line_overrides: HashMap<String, usize> = HashMap::new();
+    let mut pending_line: Option<usize> = None;
+    let mut first_file_path: Option<String> = None;
 
+    for arg in path_args {
+        // Check for +N line number argument
+        if let Some(line_str) = arg.strip_prefix('+') {
+            if let Ok(line) = line_str.parse::<usize>() {
+                pending_line = Some(line);
+                continue;
+            }
+        }
+
+        let path = Path::new(&arg);
         if path.is_dir() {
             continue;
         }
@@ -927,13 +971,30 @@ fn create_workspace(
             buffer
         };
 
+        // Track line override for this file if +N was specified before it
+        if let Some(ref buf_path) = argument_buffer.path {
+            let path_str = buf_path.to_string_lossy().to_string();
+            if first_file_path.is_none() {
+                first_file_path = Some(path_str.clone());
+            }
+            if let Some(line) = pending_line.take() {
+                line_overrides.insert(path_str, line);
+            }
+        }
+
         workspace.add_buffer(argument_buffer);
         view.initialize_buffer(workspace.current_buffer.as_mut().unwrap())?;
     }
 
-    Ok(workspace)
-}
+    // If +N was specified at the end with no following file, apply to the first file
+    if let Some(line) = pending_line {
+        if let Some(path_str) = first_file_path {
+            line_overrides.insert(path_str, line);
+        }
+    }
 
+    Ok((workspace, line_overrides))
+}
 fn build_full_syntax_set() -> Result<SyntaxSet> {
     SyntaxLoader::new(user_syntax_path()?).load()
 }
