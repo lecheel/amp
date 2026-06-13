@@ -7,7 +7,7 @@ use std::env;
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    // Initialize logging
+    // Initialize logging ...
     env_logger::init();
 
     // Instantiate, run, and handle errors for the application.
