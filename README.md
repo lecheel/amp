@@ -4,16 +4,16 @@ Heavily inspired by Vi/Vim. Amp aims to take the core interaction model of Vim,
 simplify it, and bundle in the essential features required for a modern text
 editor.
 
-![Amp screenshot](screenshot.png?raw=true "Amp")
-![Amp screenshot](bufferlist.png?raw=true "Amp")
-![Amp screenshot](cmdmode.png?raw=true "Amp")
-![Amp screenshot](filepicker.png?raw=true "Amp")
-![Amp screenshot](gitgutter.png?raw=true "Amp")
-![Amp screenshot](gitstatus.png?raw=true "Amp")
-![Amp screenshot](mru.png?raw=true "Amp")
-![Amp screenshot](rectops.png?raw=true "Amp")
-![Amp screenshot](ripgrep.png?raw=true "Amp")
-![Amp screenshot](whichkey.png?raw=true "Amp")
+![Amp screenshot](./res/screenshot.png?raw=true "Amp")
+![Amp screenshot](./res/bufferlist.png?raw=true "BufferList")
+![Amp screenshot](./res/cmdmode.png?raw=true "CmdMode")
+![Amp screenshot](./res/filepicker.png?raw=true "FilePicker")
+![Amp screenshot](./res/gitgutter.png?raw=true "GitGutter")
+![Amp screenshot](./res/gitstatus.png?raw=true "GitStatus")
+![Amp screenshot](./res/mru.png?raw=true "Mru")
+![Amp screenshot](./res/rectops.png?raw=true "rectOPS")
+![Amp screenshot](./res/ripgrep.png?raw=true "RipGrep")
+![Amp screenshot](./res/whichkey.png?raw=true "WhichKey")
 
 
 Written with :heart: in [Rust](http://rust-lang.org).
