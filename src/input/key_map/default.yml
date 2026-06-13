@@ -62,6 +62,9 @@ normal:
   "'": application::switch_to_jump_mode
   "0": application::switch_to_command_mode
   "#": application::switch_to_syntax_mode
+  "*":
+    - search::search_under_cursor
+    - application::switch_to_normal_mode
   /:
     - application::switch_to_search_mode
     - search::reset

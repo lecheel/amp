@@ -61,7 +61,7 @@ pub fn show(app: &mut Application) -> Result {
     let repo = app.repository.as_ref().context("No repository available")?;
     let repo_path = repo.workdir().context("No working directory")?;
 
-    let branch = repo
+    let _branch = repo
         .head()
         .ok()
         .and_then(|h| h.shorthand().map(|s| s.to_string()))

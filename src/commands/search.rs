@@ -77,6 +77,61 @@ pub fn reset(app: &mut Application) -> Result {
     Ok(())
 }
 
+pub fn search_under_cursor(app: &mut Application) -> Result {
+    let word = app
+        .workspace
+        .current_buffer
+        .as_ref()
+        .and_then(|buf| {
+            let data = buf.data();
+            let line = data.lines().nth(buf.cursor.line)?;
+            let offset = buf.cursor.offset;
+            extract_word_at(line, offset)
+        })
+        .context("No word under cursor")?;
+
+    commands::application::switch_to_search_mode(app)?;
+
+    if let Mode::Search(ref mut mode) = app.mode {
+        mode.input = Some(word);
+        mode.insert = false;
+    }
+
+    run(app)
+}
+
+fn extract_word_at(line: &str, offset: usize) -> Option<String> {
+    let chars: Vec<char> = line.chars().collect();
+    if offset >= chars.len() {
+        return None;
+    }
+    let start_offset = if is_word_char(chars[offset]) {
+        offset
+    } else if offset > 0 && is_word_char(chars[offset - 1]) {
+        offset - 1
+    } else {
+        return None;
+    };
+    let mut word_start = start_offset;
+    while word_start > 0 && is_word_char(chars[word_start - 1]) {
+        word_start -= 1;
+    }
+    let mut word_end = start_offset + 1;
+    while word_end < chars.len() && is_word_char(chars[word_end]) {
+        word_end += 1;
+    }
+    let word: String = chars[word_start..word_end].iter().collect();
+    if word.is_empty() {
+        None
+    } else {
+        Some(word)
+    }
+}
+
+fn is_word_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
 pub fn push_search_char(app: &mut Application) -> Result {
     let key = app
         .view
