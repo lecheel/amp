@@ -48,10 +48,20 @@ pub fn display(
         alignment: Alignment::Right,
     });
 
-    let cursor_offset = " SEARCH ".graphemes(true).count()
+    let left_width: usize = status_entries
+        .iter()
+        .filter(|e| e.alignment == Alignment::Left)
+        .map(|e| e.content.graphemes(true).count())
+        .sum();
+    let cursor_offset = left_width
         + format!(" {}", mode.input.as_ref().unwrap_or(&String::new()))
             .graphemes(true)
             .count();
+
+    // let cursor_offset = " SEARCH ".graphemes(true).count()
+    // + format!(" {}", mode.input.as_ref().unwrap_or(&String::new()))
+    // .graphemes(true)
+    // .count();
 
     let mut presenter = view.build_presenter()?;
     let buffer = workspace.current_buffer.as_ref().context(BUFFER_MISSING)?;
