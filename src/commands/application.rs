@@ -136,6 +136,12 @@ pub fn handle_input(app: &mut Application) -> Result {
             return Ok(());
         }
     }
+    if let Mode::PendingLeader(_) = app.mode {
+        if app.view.last_key().is_some() {
+            leader_push_key(app)?;
+            return Ok(());
+        }
+    }
 
     let commands = app.view.last_key().as_ref().and_then(|key| {
         app.mode_str()
